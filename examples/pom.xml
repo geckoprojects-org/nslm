@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.example.spi</groupId>
+    <artifactId>nslm</artifactId>
+    <version>${revision}</version>
+  </parent>
+  <artifactId>examples</artifactId>
+  <packaging>pom</packaging>
+  <name>Example bundles</name>
+  <description>Greeter API in two versions, providers (META-INF/services only) and consumers
+    (ServiceLoader.load in a DS activate method). No OSGi Service Loader Mediator metadata anywhere.</description>
+
+  <modules>
+    <module>org.example.serviceloader.api</module>
+    <module>org.example.serviceloader.api.v2</module>
+    <module>org.example.serviceloader.provider</module>
+    <module>org.example.serviceloader.provider.v2</module>
+    <module>org.example.serviceloader.consumer</module>
+    <module>org.example.serviceloader.consumer.v2</module>
+  </modules>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>biz.aQute.bnd</groupId>
+        <artifactId>bnd-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>

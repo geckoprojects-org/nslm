@@ -1,0 +1,5 @@
+Bundle-Description: ServiceLoader benchmark and capability probes, run as an OSGi test bundle under \
+	three mediators (bench-*.bndrun). No ServiceLoader metadata; SPI Fly is driven by its auto properties.
+Test-Cases: ${classes;HIERARCHY_INDIRECTLY_ANNOTATED;org.junit.platform.commons.annotation.Testable;CONCRETE}
+-privatepackage: org.example.serviceloader.bench
+-noextraheaders: true

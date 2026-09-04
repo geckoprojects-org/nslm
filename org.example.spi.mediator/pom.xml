@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.example.spi</groupId>
+    <artifactId>nslm</artifactId>
+    <version>${revision}</version>
+  </parent>
+  <artifactId>org.example.spi.mediator</artifactId>
+  <name>ServiceLoader launcher mediator (runpath jar)</name>
+  <description>-runpath jar (Embedded-Activator + LauncherExtension) that installs the SpiClassLoader as
+    thread context class loader and hooks the bundle class loaders of Felix and Equinox. Nothing is woven.
+    Needs the extended launcher org.example.spi.launcher.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.osgi</groupId>
+      <artifactId>osgi.core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <!-- embedded as private package, see bnd.bnd -->
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.spi.core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <!-- aQute.launcher.spi.LauncherExtension -->
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.spi.launcher</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <!-- Equinox ClassLoaderHook API; present in the framework class loader at runtime -->
+    <dependency>
+      <groupId>org.eclipse.platform</groupId>
+      <artifactId>org.eclipse.osgi</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>biz.aQute.bnd</groupId>
+        <artifactId>bnd-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>

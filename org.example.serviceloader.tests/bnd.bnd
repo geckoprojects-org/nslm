@@ -1,0 +1,10 @@
+Bundle-Description: OSGi integration tests: plain java.util.ServiceLoader across bundles WITHOUT OSGi \
+	Service Loader Mediator metadata and without module-info, mediated either by org.example.spi.weaver \
+	(framework extension with WeavingHook, standard launcher; test-weaver*.bndrun) or by \
+	org.example.spi.mediator (a -runpath jar with the extended launcher org.example.spi.launcher; \
+	test-mediator*.bndrun).
+
+Test-Cases: ${classes;HIERARCHY_INDIRECTLY_ANNOTATED;org.junit.platform.commons.annotation.Testable;CONCRETE}
+
+-privatepackage: org.example.serviceloader.tests
+-noextraheaders: true

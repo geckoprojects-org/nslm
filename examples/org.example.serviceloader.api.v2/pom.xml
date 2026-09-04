@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.example.spi</groupId>
+    <artifactId>examples</artifactId>
+    <version>${revision}</version>
+  </parent>
+  <artifactId>org.example.serviceloader.api.v2</artifactId>
+  <version>2.0.0-SNAPSHOT</version>
+  <name>Greeter API 2.0</name>
+  <description>Second, incompatible version (2.0.0) of the Greeter SPI package for the class space tests. Same package name, exported by a different bundle.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.osgi</groupId>
+      <artifactId>osgi.annotation</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+</project>

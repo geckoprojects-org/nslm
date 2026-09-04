@@ -1,0 +1,32 @@
+# ServiceLoader mediator WITHOUT OSGi Service Loader Mediator metadata for any launcher: a framework
+# extension bundle whose ExtensionBundle-Activator registers a WeavingHook. The hook rewrites every
+# ServiceLoader.load(Class) / load(Class, ClassLoader) call site in bundle classes to
+# org.example.spi.weaver.ServiceLoaders.load(..., CallingClass.class), which returns a real
+# java.util.ServiceLoader backed by SpiRegistry/SpiClassLoader of org.example.spi.core (private copy,
+# shared with org.example.spi.mediator). See README.md at the repository root.
+Bundle-Description: java.util.ServiceLoader across bundles without metadata: WeavingHook \
+	(java.lang.classfile) that redirects ServiceLoader.load call sites to ServiceLoaders.load, \
+	backed by the META-INF/services registry of org.example.spi.core.
+
+# Framework extension: lives in the framework class loader, is resolved at install time and its
+# activator runs before any regular bundle starts, so no start level ordering is needed. Its
+# exports become exports of the system bundle; woven classes get a DynamicImport-Package on it.
+Fragment-Host: system.bundle; extension:=framework
+ExtensionBundle-Activator: org.example.spi.weaver.SpiWeaver
+
+Export-Package: org.example.spi.weaver;version=1.0.0
+
+# own package plus the private copy of the shared core
+-privatepackage: \
+	org.example.spi.weaver,\
+	org.example.spi.core
+
+# an extension bundle can only import from the system bundle
+Import-Package: \
+	org.osgi.framework.*,\
+	org.osgi.util.tracker,\
+	!*
+
+-jpms-module-info: ,
+-sources: false
+-noextraheaders: true

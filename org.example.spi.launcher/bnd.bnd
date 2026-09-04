@@ -1,0 +1,32 @@
+# Copy of bnd's biz.aQute.launcher 7.4.0 (sources from Maven Central) extended with
+# aQute.launcher.spi.LauncherExtension. bnd picks the first -runpath jar carrying the Launcher-Plugin
+# header, so this jar replaces the built-in launcher when listed in -runpath (no bnd build needed).
+Bundle-Version: 7.4.0.spi
+Bundle-Description: Prototype of the bnd launcher with a pre-framework hook for -runpath jars.
+
+# libg is inlined like in the original launcher
+-conditionalpackage: \
+	aQute.lib.*,\
+	aQute.libg.*
+
+-includepackage: \
+	aQute.launcher,\
+	aQute.launcher.constants,\
+	aQute.launcher.minifw,\
+	aQute.launcher.plugin,\
+	aQute.launcher.spi
+
+Export-Package: aQute.launcher.spi;version=1.0.0
+
+# aQute.launcher.pre/.agent are compiled (Launcher references them) but, as in the original, not
+# packaged: biz.aQute.launcher.pre.jar is unpacked into the output directory by the dependency plugin
+Import-Package: \
+	!aQute.launcher.agent,\
+	!aQute.launcher.pre,\
+	*;version="${range;[==,+)}"
+
+# not a bundle for a framework: no module descriptor, no sources, no baselining noise
+-jpms-module-info: ,
+-sources: false
+-noextraheaders: true
+-fixupmessages.launcher: "Split package";is:=ignore

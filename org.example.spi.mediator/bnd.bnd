@@ -1,0 +1,18 @@
+# ServiceLoader mediator WITHOUT OSGi Service Loader Mediator metadata. Runs as a -runpath jar next
+# to the framework (Embedded-Activator + aQute.launcher.spi.LauncherExtension), see README.md at the
+# repository root. Not a bundle.
+Bundle-Description: java.util.ServiceLoader across bundles: registry from META-INF/services (and \
+	module-info provides), SpiClassLoader as TCCL, Felix boot delegation loader / Equinox ClassLoaderHook.
+
+Embedded-Activator: org.example.spi.mediator.SpiMediator
+
+# own packages plus the private copy of the shared core
+-privatepackage: \
+	org.example.spi.mediator.*,\
+	org.example.spi.core
+
+# lives in the framework class loader; OSGi imports are meaningless here
+Import-Package:
+-jpms-module-info: ,
+-sources: false
+-noextraheaders: true

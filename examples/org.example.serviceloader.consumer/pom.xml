@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.example.spi</groupId>
+    <artifactId>examples</artifactId>
+    <version>${revision}</version>
+  </parent>
+  <artifactId>org.example.serviceloader.consumer</artifactId>
+  <name>Greeter consumer 1.0</name>
+  <description>Consumer that calls plain ServiceLoader.load(Greeter.class) in the activate() of a DS component. No metadata, no helper class.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.osgi</groupId>
+      <artifactId>org.osgi.service.component.annotations</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+</project>
