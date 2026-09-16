@@ -10,8 +10,9 @@
   </parent>
   <artifactId>org.example.serviceloader.tests</artifactId>
   <name>OSGi integration tests</name>
-  <description>The same JUnit 5 tests run in four bndruns: weaver on Felix and Equinox (standard bnd
-    launcher), launcher based mediator on Felix and Equinox (extended launcher on the -runpath).</description>
+  <description>The same JUnit 5 tests run in five bndruns: weaver on Felix and Equinox (standard bnd
+    launcher), launcher based mediator on Felix and Equinox (extended launcher on the -runpath), and the
+    Equinox framework extension (standard launcher, hookconfigurators.properties on the -runpath).</description>
 
   <properties>
     <jakarta.xml.bind.version>4.0.2</jakarta.xml.bind.version>
@@ -198,6 +199,11 @@
     </dependency>
     <dependency>
       <groupId>org.example.spi</groupId>
+      <artifactId>org.example.spi.equinox</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
       <artifactId>org.example.serviceloader.api.v2</artifactId>
       <scope>runtime</scope>
     </dependency>
@@ -219,6 +225,11 @@
     <dependency>
       <groupId>org.example.spi</groupId>
       <artifactId>org.example.serviceloader.consumer.v2</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.consumer.rb</artifactId>
       <scope>runtime</scope>
     </dependency>
 
@@ -396,6 +407,7 @@
             <bndrun>test-weaver-equinox.bndrun</bndrun>
             <bndrun>test-mediator.bndrun</bndrun>
             <bndrun>test-mediator-equinox.bndrun</bndrun>
+            <bndrun>test-equinox-extension.bndrun</bndrun>
           </bndruns>
           <failOnChanges>false</failOnChanges>
           <writeOnChanges>true</writeOnChanges>
@@ -417,6 +429,7 @@
                 <bndrun>test-weaver-equinox.bndrun</bndrun>
                 <bndrun>test-mediator.bndrun</bndrun>
                 <bndrun>test-mediator-equinox.bndrun</bndrun>
+                <bndrun>test-equinox-extension.bndrun</bndrun>
               </bndruns>
               <failOnChanges>false</failOnChanges>
               <resolve>false</resolve>

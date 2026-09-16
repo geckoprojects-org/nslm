@@ -14,8 +14,12 @@
 package org.example.serviceloader.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.IOException;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.ServiceLoader;
 import java.util.concurrent.CountDownLatch;
@@ -47,6 +51,7 @@ public class GreeterServiceLoaderTest {
 	static final String CONSUMER_V1 = "org.example.serviceloader.consumer";
 	static final String PROVIDER_V2 = "org.example.serviceloader.provider.v2";
 	static final String CONSUMER_V2 = "org.example.serviceloader.consumer.v2";
+	static final String CONSUMER_RB = "org.example.serviceloader.consumer.rb";
 
 	static final String ENGLISH = "org.example.serviceloader.provider.EnglishGreeter: Hello from the English greeter";
 	static final String GERMAN = "org.example.serviceloader.provider.GermanGreeter: Hallo vom deutschen Greeter";
@@ -57,7 +62,7 @@ public class GreeterServiceLoaderTest {
 
 	@Test
 	void bundlesCarryNoServiceLoaderMetadata() {
-		for (String bsn : new String[] { PROVIDER_V1, CONSUMER_V1, PROVIDER_V2, CONSUMER_V2 }) {
+		for (String bsn : new String[] { PROVIDER_V1, CONSUMER_V1, PROVIDER_V2, CONSUMER_V2, CONSUMER_RB }) {
 			Bundle bundle = TestSupport.bundle(context, bsn);
 			String provide = String.valueOf(bundle.getHeaders().get("Provide-Capability"));
 			String require = String.valueOf(bundle.getHeaders().get("Require-Capability"));
@@ -84,6 +89,24 @@ public class GreeterServiceLoaderTest {
 			.doesNotContain("EnglishGreeter").doesNotContain("GermanGreeter");
 	}
 
+	/**
+	 * Require-Bundle creates an osgi.wiring.bundle wire and no package wire, so the
+	 * class space of the API package can only be found through the export of the
+	 * required bundle. The consumer must still see exactly Greeter 1.0.
+	 */
+	@Test
+	void consumerWiredWithRequireBundleSeesTheProvidersOfTheRequiredBundle() {
+		Bundle consumer = TestSupport.bundle(context, CONSUMER_RB);
+		assertThat(String.valueOf(consumer.getHeaders().get("Require-Bundle"))).contains("org.example.serviceloader.api");
+		assertThat(String.valueOf(consumer.getHeaders().get("Import-Package"))).doesNotContain("org.example.serviceloader.api");
+
+		String output = TestSupport.restartAndCapture(consumer, "[GreeterConsumerRb] found");
+
+		assertThat(output).contains(ENGLISH).contains(GERMAN)
+			.contains("[GreeterConsumerRb] found 2 Greeter provider(s)")
+			.doesNotContain("FrenchGreeter");
+	}
+
 	/** this test bundle is wired to Greeter 1.0; TCCL path (no class loader argument) */
 	@Test
 	void serviceLoaderWithoutClassLoaderArgument() {
@@ -98,6 +121,39 @@ public class GreeterServiceLoaderTest {
 
 		assertThat(greetings(loader))
 			.containsExactlyInAnyOrder("Hello from the English greeter", "Hallo vom deutschen Greeter");
+	}
+
+	/**
+	 * META-INF/services is an ordinary resource. Read by something that is not a
+	 * ServiceLoader - a library with its own provider scanner - the mediating class
+	 * loader must answer with the plain resources of the class path it wraps, not
+	 * with the provider bundles of a class space. Only observable where a mediating
+	 * TCCL is installed; the woven call sites use a class loader nobody else holds.
+	 */
+	@Test
+	void onlyWhatAServiceLoaderReadsIsMediated() throws IOException {
+		ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+		assumeTrue(tccl != null && "spi-tccl".equals(tccl.getName()), "no mediating TCCL on this thread");
+
+		List<URL> manual = Collections.list(tccl.getResources("META-INF/services/" + Greeter.class.getName()));
+
+		if (serviceLoaderOnly()) {
+			assertThat(manual).as("no ServiceLoader on the stack").isEmpty();
+		} else {
+			assertThat(manual).as("guard switched off: a manual scan is served too").isNotEmpty();
+		}
+		assertThat(greetings(ServiceLoader.load(Greeter.class))).as("the same name read by a ServiceLoader").hasSize(2);
+	}
+
+	/** the configured value of whichever mediator runs this bndrun; both default to true */
+	private boolean serviceLoaderOnly() {
+		for (String key : new String[] { "spi.weaver.serviceLoaderOnly", "spi.mediator.serviceLoaderOnly" }) {
+			String value = context.getProperty(key);
+			if (value != null) {
+				return Boolean.parseBoolean(value.trim());
+			}
+		}
+		return true;
 	}
 
 	/** stream() works because both mediators hand out the real java.util.ServiceLoader */

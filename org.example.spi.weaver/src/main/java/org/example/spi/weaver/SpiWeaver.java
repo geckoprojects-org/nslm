@@ -34,6 +34,9 @@ import org.osgi.framework.hooks.weaving.WeavingHook;
  * <li>{@code spi.weaver.trace} (default false)</li>
  * <li>{@code spi.weaver.providerStates} (default {@code resolved}, alternative
  * {@code active}): same meaning as {@code spi.mediator.providerStates}</li>
+ * <li>{@code spi.weaver.serviceLoaderOnly} (default true): mediate only what a
+ * {@code java.util.ServiceLoader} reads; false also serves a library that scans
+ * {@code META-INF/services} itself</li>
  * <li>{@code spi.weaver.tccl} (default false): additionally install a
  * {@link SpiClassLoader} in TCCL mode as thread context class loader of the
  * thread that activates the extension (the launcher thread; every thread
@@ -53,6 +56,7 @@ public final class SpiWeaver implements BundleActivator {
 	public static final String PROP_TRACE = "spi.weaver.trace";
 	public static final String PROP_PROVIDER_STATES = "spi.weaver.providerStates";
 	public static final String PROP_TCCL = "spi.weaver.tccl";
+	public static final String PROP_SERVICE_LOADER_ONLY = "spi.weaver.serviceLoaderOnly";
 
 	private SpiRegistry registry;
 	private SpiLoaders loaders;
@@ -73,6 +77,7 @@ public final class SpiWeaver implements BundleActivator {
 			: Bundle.RESOLVED | Bundle.STARTING | Bundle.ACTIVE | Bundle.STOPPING;
 
 		registry = new SpiRegistry(trace);
+		registry.setServiceLoaderOnly(flag(context, PROP_SERVICE_LOADER_ONLY, true));
 		loaders = new SpiLoaders(registry, trace);
 		hook = new ServiceLoaderWeavingHook(trace);
 

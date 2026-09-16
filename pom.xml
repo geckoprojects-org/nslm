@@ -19,6 +19,7 @@
     <module>org.example.spi.weaver</module>
     <module>org.example.spi.launcher</module>
     <module>org.example.spi.mediator</module>
+    <module>org.example.spi.equinox</module>
     <module>examples</module>
     <module>org.example.serviceloader.tests</module>
     <module>org.example.serviceloader.bench</module>
@@ -117,6 +118,11 @@
       </dependency>
       <dependency>
         <groupId>org.example.spi</groupId>
+        <artifactId>org.example.spi.equinox</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.example.spi</groupId>
         <artifactId>org.example.serviceloader.api</artifactId>
         <version>${revision}</version>
       </dependency>
@@ -143,6 +149,11 @@
       <dependency>
         <groupId>org.example.spi</groupId>
         <artifactId>org.example.serviceloader.consumer.v2</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.example.spi</groupId>
+        <artifactId>org.example.serviceloader.consumer.rb</artifactId>
         <version>${revision}</version>
       </dependency>
     </dependencies>

@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,6 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.BundleEvent;
+import org.osgi.framework.namespace.BundleNamespace;
 import org.osgi.framework.wiring.BundleCapability;
 import org.osgi.framework.wiring.BundleRevision;
 import org.osgi.framework.wiring.BundleWire;
@@ -58,6 +60,8 @@ public final class SpiRegistry implements BundleTrackerCustomizer<List<ProviderE
 
 	static final String SERVICES_DIR = "META-INF/services";
 	static final String MODULE_INFO = "module-info.class";
+	private static final String VISIBILITY = BundleNamespace.REQUIREMENT_VISIBILITY_DIRECTIVE;
+	private static final String VISIBILITY_REEXPORT = BundleNamespace.VISIBILITY_REEXPORT;
 
 	private final Tracing trace;
 	private final SpiUrlHandler urls = new SpiUrlHandler(this);
@@ -65,9 +69,33 @@ public final class SpiRegistry implements BundleTrackerCustomizer<List<ProviderE
 	private volatile Map<String, List<ProviderEntry>> byService = Map.of();
 	private volatile Map<String, List<ProviderEntry>> byImpl = Map.of();
 	private BundleTracker<List<ProviderEntry>> tracker;
+	private volatile boolean serviceLoaderOnly = true;
 
 	public SpiRegistry(Tracing trace) {
 		this.trace = Objects.requireNonNull(trace);
+	}
+
+	/**
+	 * {@code META-INF/services/<type>} is an ordinary class loader resource. By
+	 * default only a {@link java.util.ServiceLoader} reading it is answered with the
+	 * providers of the asking bundle's class space; a library that scans the
+	 * resource itself gets the plain resources of the loader it asked. Switching
+	 * this off serves such a scanner as well, at the price of also answering code
+	 * that just wanted to list its own files.
+	 *
+	 * @param serviceLoaderOnly whether only ServiceLoader lookups are mediated
+	 */
+	public void setServiceLoaderOnly(boolean serviceLoaderOnly) {
+		this.serviceLoaderOnly = serviceLoaderOnly;
+		if (serviceLoaderOnly && !ServiceLoaderCallers.isCalibrated()) {
+			trace.trace("ServiceLoader lookup guard not calibrated: every META-INF/services read is mediated");
+		} else {
+			trace.trace("mediating %s", serviceLoaderOnly ? "ServiceLoader lookups only" : "every META-INF/services read");
+		}
+	}
+
+	boolean isServiceLoaderOnly() {
+		return serviceLoaderOnly;
 	}
 
 	/** @param states bundle state mask, e.g. {@code Bundle.STARTING | Bundle.ACTIVE} */
@@ -108,11 +136,14 @@ public final class SpiRegistry implements BundleTrackerCustomizer<List<ProviderE
 				// boot delegated API type: one class space for everybody
 				return all;
 			}
-			// The consumer neither imports nor exports the package. Either it holds a private
-			// copy of the API (then no foreign provider is type compatible) or it cannot see
-			// the API at all (then it is not a consumer of it). Both cases: nothing.
-			trace.trace("bundle %s is not wired to %s: no providers for %s", consumer.getSymbolicName(), pkg, serviceName);
-			return List.of();
+			// The consumer neither imports nor exports the package: it holds a private copy of
+			// the API, or it cannot see the API at all and is not a consumer of it. No foreign
+			// provider can be type compatible, but the bundle's own providers are trivially in
+			// its own class space and the plain ServiceLoader would find them.
+			List<ProviderEntry> own = ownProviders(all, consumer);
+			trace.trace("bundle %s is not wired to %s: %d own provider(s) for %s", consumer.getSymbolicName(), pkg,
+				own.size(), serviceName);
+			return own;
 		}
 		List<ProviderEntry> compatible = new ArrayList<>(all.size());
 		for (ProviderEntry entry : all) {
@@ -125,6 +156,17 @@ public final class SpiRegistry implements BundleTrackerCustomizer<List<ProviderE
 				consumer.getSymbolicName(), compatible.size(), all.size());
 		}
 		return compatible;
+	}
+
+	/** the entries the consumer bundle contributes itself */
+	private static List<ProviderEntry> ownProviders(List<ProviderEntry> all, Bundle consumer) {
+		List<ProviderEntry> own = new ArrayList<>(1);
+		for (ProviderEntry entry : all) {
+			if (consumer.equals(entry.bundle())) {
+				own.add(entry);
+			}
+		}
+		return own;
 	}
 
 	/**
@@ -339,14 +381,28 @@ public final class SpiRegistry implements BundleTrackerCustomizer<List<ProviderE
 	}
 
 	/**
-	 * @return the package capability the bundle is wired to for {@code pkg}
-	 *         (import), or its own export/contained capability, or {@code null}
+	 * The capability that identifies the class space {@code bundle} sees {@code pkg}
+	 * in. Searched in the order the framework searches for a class: Import-Package
+	 * wire, Require-Bundle, the bundle's own export.
+	 *
+	 * @return the package capability, or {@code null} if the bundle is not wired to
+	 *         the package at all, i.e. it is private to the bundle or invisible
 	 */
 	static BundleCapability packageCapability(Bundle bundle, String pkg) {
 		BundleWiring wiring = bundle.adapt(BundleWiring.class);
 		if (wiring == null || pkg.isEmpty()) {
 			return null;
 		}
+		BundleCapability imported = importedPackage(wiring, pkg);
+		if (imported != null) {
+			return imported;
+		}
+		BundleCapability required = requiredBundlePackage(wiring, pkg, false, new HashSet<>());
+		return required != null ? required : exportedPackage(wiring, pkg);
+	}
+
+	/** the capability an Import-Package of the wiring is wired to */
+	private static BundleCapability importedPackage(BundleWiring wiring, String pkg) {
 		List<BundleWire> wires = wiring.getRequiredWires(BundleRevision.PACKAGE_NAMESPACE);
 		if (wires != null) {
 			for (BundleWire wire : wires) {
@@ -355,12 +411,49 @@ public final class SpiRegistry implements BundleTrackerCustomizer<List<ProviderE
 				}
 			}
 		}
+		return null;
+	}
+
+	/** the capability of a package the wiring exports itself */
+	private static BundleCapability exportedPackage(BundleWiring wiring, String pkg) {
 		List<BundleCapability> own = wiring.getCapabilities(BundleRevision.PACKAGE_NAMESPACE);
 		if (own != null) {
 			for (BundleCapability capability : own) {
 				if (pkg.equals(capability.getAttributes().get(BundleRevision.PACKAGE_NAMESPACE))) {
 					return capability;
 				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Require-Bundle creates no package wire, so the package of a required bundle
+	 * is only reachable through its {@code osgi.wiring.bundle} wire. What a
+	 * required bundle requires in turn counts only when it does so with
+	 * {@code visibility:=reexport}.
+	 */
+	private static BundleCapability requiredBundlePackage(BundleWiring wiring, String pkg, boolean reexportOnly,
+		Set<BundleWiring> seen) {
+		List<BundleWire> wires = wiring.getRequiredWires(BundleRevision.BUNDLE_NAMESPACE);
+		if (wires == null) {
+			return null;
+		}
+		for (BundleWire wire : wires) {
+			if (reexportOnly && !VISIBILITY_REEXPORT.equals(wire.getRequirement().getDirectives().get(VISIBILITY))) {
+				continue;
+			}
+			BundleWiring required = wire.getProviderWiring();
+			if (required == null || !seen.add(required)) {
+				continue;
+			}
+			BundleCapability exported = exportedPackage(required, pkg);
+			if (exported != null) {
+				return exported;
+			}
+			BundleCapability reexported = requiredBundlePackage(required, pkg, true, seen);
+			if (reexported != null) {
+				return reexported;
 			}
 		}
 		return null;

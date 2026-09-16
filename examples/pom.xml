@@ -21,6 +21,7 @@
     <module>org.example.serviceloader.provider.v2</module>
     <module>org.example.serviceloader.consumer</module>
     <module>org.example.serviceloader.consumer.v2</module>
+    <module>org.example.serviceloader.consumer.rb</module>
   </modules>
 
   <build>

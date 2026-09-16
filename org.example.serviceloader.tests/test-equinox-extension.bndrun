@@ -1,15 +1,19 @@
 -tester: biz.aQute.tester.junit-platform
 
--runfw: org.apache.felix.framework;version='[7.0.5,7.0.5]'
+-runfw: org.eclipse.osgi;version='[3.23,3.24)'
 -runee: JavaSE-25
 
-# Weaving mediator: standard bnd launcher, NO -runpath additions. org.example.spi.weaver is a
-# framework extension bundle (ExtensionBundle-Activator + WeavingHook, java.lang.classfile) that
-# redirects every ServiceLoader.load call site to ServiceLoaders.load.
-# spi.weaver.tccl: also serve the ServiceLoader calls inside the JDK (StAX test) through the TCCL
+# Equinox framework extension: the STANDARD bnd launcher, nothing woven, no LauncherExtension. The jar
+# only has to be on the framework class path, because Equinox scans hookconfigurators.properties on the
+# class loader that loaded org.eclipse.osgi while the framework is constructed
+# (HookRegistry.mergeFileHookConfigurators). Installed as a bundle it would be inert. That scan is the
+# entire deployment: ClassLoaderHook plus an ActivatorHookFactory that opens the registry with the
+# system bundle context.
+-runpath: \
+	org.example.spi.equinox;version='[1.0,1.1)'
+
 -runproperties: \
-	spi.weaver.trace=true,\
-	spi.weaver.tccl=true
+	spi.equinox.trace=true
 
 # Bundles without ServiceLoader metadata are invisible to the resolver, so every one is listed.
 #  * Greeter 1.0: provider + consumer; Greeter 2.0 (same package, other bundle): provider + consumer.
@@ -41,8 +45,7 @@
 	bnd.identity;id='org.glassfish.jersey.core.jersey-common',\
 	bnd.identity;id='org.eclipse.persistence.jpa',\
 	bnd.identity;id='org.eclipse.angus.mail',\
-	bnd.identity;id='org.hibernate.validator',\
-	bnd.identity;id='org.example.spi.weaver'
+	bnd.identity;id='org.hibernate.validator'
 
 -runbundles: \
 	assertj-core;version='[3.27.7,3.27.8)',\
@@ -63,7 +66,6 @@
 	org.example.serviceloader.provider;version='[1.0.0,1.0.1)',\
 	org.example.serviceloader.provider.v2;version='[1.0.0,1.0.1)',\
 	org.example.serviceloader.tests;version='[1.0.0,1.0.1)',\
-	org.example.spi.weaver;version='[1.0.0,1.0.1)',\
 	org.glassfish.grizzly.framework;version='[4.0.2,4.0.3)',\
 	org.glassfish.grizzly.http;version='[4.0.2,4.0.3)',\
 	org.glassfish.jaxb.runtime;version='[4.0.5,4.0.6)',\

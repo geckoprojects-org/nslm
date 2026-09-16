@@ -9,7 +9,8 @@
 # spi.weaver.tccl: also serve the ServiceLoader calls inside the JDK (StAX test) through the TCCL
 -runproperties: \
 	spi.weaver.trace=true,\
-	spi.weaver.tccl=true
+	spi.weaver.tccl=true,\
+	spi.weaver.serviceLoaderOnly=false
 
 # Bundles without ServiceLoader metadata are invisible to the resolver, so every one is listed.
 #  * Greeter 1.0: provider + consumer; Greeter 2.0 (same package, other bundle): provider + consumer.
@@ -30,6 +31,7 @@
 	bnd.identity;id='org.example.serviceloader.consumer',\
 	bnd.identity;id='org.example.serviceloader.provider.v2',\
 	bnd.identity;id='org.example.serviceloader.consumer.v2',\
+	bnd.identity;id='org.example.serviceloader.consumer.rb',\
 	bnd.identity;id='org.apache.felix.scr',\
 	bnd.identity;id='org.glassfish.jaxb.runtime',\
 	bnd.identity;id='jakarta.websocket-api',\
@@ -98,4 +100,5 @@
 	jakarta.validation.jakarta.validation-api;version='[3.0.2,3.0.3)',\
 	org.eclipse.angus.mail;version='[2.0.3,2.0.4)',\
 	org.hibernate.validator;version='[8.0.2,8.0.3)',\
-	org.jboss.logging.jboss-logging;version='[3.5.3,3.5.4)'
+	org.jboss.logging.jboss-logging;version='[3.5.3,3.5.4)',\
+	org.example.serviceloader.consumer.rb;version='[1.0.0,1.0.1)'

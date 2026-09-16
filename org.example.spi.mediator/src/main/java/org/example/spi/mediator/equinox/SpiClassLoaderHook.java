@@ -45,7 +45,7 @@ public class SpiClassLoaderHook extends ClassLoaderHook {
 	private final Tracing trace;
 	private final ThreadLocal<Set<String>> reentrant = ThreadLocal.withInitial(HashSet::new);
 
-	SpiClassLoaderHook(SpiRegistry registry, Tracing trace) {
+	public SpiClassLoaderHook(SpiRegistry registry, Tracing trace) {
 		this.registry = registry;
 		this.trace = trace;
 	}

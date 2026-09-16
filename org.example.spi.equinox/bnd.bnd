@@ -1,0 +1,19 @@
+# Equinox framework extension, no launcher and no weaving. Equinox reads hookconfigurators.properties
+# from the class loader that loaded org.eclipse.osgi, once, while the framework is being constructed
+# (HookRegistry.mergeFileHookConfigurators). The jar therefore belongs on the -runpath; installed as a
+# bundle it would be inert, because that scan is long over by then. Not a bundle.
+Bundle-Description: ServiceLoader mediator as an Equinox framework extension: registry from \
+	META-INF/services (and module-info provides), installed as a ClassLoaderHook through \
+	hookconfigurators.properties. No launcher, no bytecode weaving, no mediator metadata.
+
+# own package plus the private copies of the shared core and the Equinox hook
+-privatepackage: \
+	org.example.spi.equinox,\
+	org.example.spi.mediator.equinox,\
+	org.example.spi.core
+
+# lives in the framework class loader; OSGi imports are meaningless here
+Import-Package:
+-jpms-module-info: ,
+-sources: false
+-noextraheaders: true

@@ -1,0 +1,6 @@
+# Reaches org.example.serviceloader.api through the bundle, not through the package: Require-Bundle
+# creates an osgi.wiring.bundle wire and no package wire, so the class space of the API package can
+# only be found through the required bundle's export.
+Require-Bundle: org.example.serviceloader.api;bundle-version="[1.0,2)"
+Import-Package: !org.example.serviceloader.api,*
+-noextraheaders: true

@@ -32,7 +32,9 @@ import org.osgi.framework.BundleReference;
  * adds one synthetic resource per provider bundle to whatever the previous TCCL
  * delivers; the asking bundle is determined once per call with a
  * {@link StackWalker}. {@code loadClass} serves provider classes from their
- * bundles and delegates everything else to the previous TCCL.</li>
+ * bundles and delegates everything else to the previous TCCL. Every bundle in the
+ * framework reaches this loader, so only what a {@link java.util.ServiceLoader}
+ * reads is mediated, see {@link ServiceLoaderCallers}.</li>
  * <li><b>strict mode</b> (bound to a consumer bundle): plugged in front of the
  * framework's boot class loader for one bundle (Felix
  * {@code felix.bootdelegation.classloaders}). Answers only ServiceLoader
@@ -140,10 +142,22 @@ public final class SpiClassLoader extends ClassLoader {
 	 * for a resource it does not have is what costs: Equinox, for example, ends a
 	 * miss in its compatibility boot delegation, i.e. a scan of the application
 	 * class path.
+	 * <p>
+	 * Mediated is only what a {@link java.util.ServiceLoader} reads. The same
+	 * resource requested by a library with its own provider scanner is answered
+	 * with the plain resources of the class loader it asked, see
+	 * {@link ServiceLoaderCallers}. {@link #getResource(String)} is not guarded
+	 * that way: the ServiceLoader never calls it, so the single resource form
+	 * exists for exactly those manual lookups.
 	 */
 	@Override
 	public Enumeration<URL> getResources(String name) throws IOException {
 		String serviceName = SpiRegistry.serviceNameOf(name);
+		if (serviceName != null && registry.isServiceLoaderOnly() && !ServiceLoaderCallers.isServiceLoaderLookup()) {
+			trace.trace("%s: %s is not read by a ServiceLoader, serving the plain resources", getName(), name);
+			// strict mode answers nothing, so the framework continues its normal search
+			return strict ? Collections.emptyEnumeration() : super.getResources(name);
+		}
 		if (serviceName != null) {
 			Bundle asking = consumer != null ? consumer : callerBundle();
 			List<URL> spi = spiResources(serviceName, asking);

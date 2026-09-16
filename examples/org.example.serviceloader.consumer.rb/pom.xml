@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.example.spi</groupId>
+    <artifactId>examples</artifactId>
+    <version>${revision}</version>
+  </parent>
+  <artifactId>org.example.serviceloader.consumer.rb</artifactId>
+  <name>Greeter consumer 1.0 via Require-Bundle</name>
+  <description>Same consumer, but it reaches the Greeter API through Require-Bundle instead of Import-Package: there is no package wire to read the class space from.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.osgi</groupId>
+      <artifactId>org.osgi.service.component.annotations</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+</project>
