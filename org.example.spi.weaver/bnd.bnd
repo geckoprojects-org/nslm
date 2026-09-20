@@ -16,6 +16,19 @@ ExtensionBundle-Activator: org.example.spi.weaver.SpiWeaver
 
 Export-Package: org.example.spi.weaver;version=1.0.0
 
+# Bundles that DO carry OSGi Service Loader Mediator metadata (slf4j-api 2 and its providers are the
+# common case) do not resolve at all unless someone provides the extender capability. A framework
+# extension's capabilities become capabilities of the system bundle - Felix 7.0.5 and Equinox 3.23 both
+# do that, WeaverTest checks it - so at runtime the weaver announces them itself and nothing else is
+# needed. The processor is what this bundle really is; the registrar clause is satisfied structurally
+# only: providers become visible to java.util.ServiceLoader, they are not registered as OSGi services.
+# For the bnd resolver this bundle is an ordinary resource providing osgi.extender, which is why the
+# bndruns declare the same two capabilities in -runsystemcapabilities: otherwise the resolver would
+# drag the weaver into runs that use one of the other two mediator deployments.
+Provide-Capability: \
+	osgi.extender;osgi.extender=osgi.serviceloader.processor;version:Version=1.0.0,\
+	osgi.extender;osgi.extender=osgi.serviceloader.registrar;version:Version=1.0.0
+
 # own package plus the private copy of the shared core
 -privatepackage: \
 	org.example.spi.weaver,\

@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
+import org.osgi.framework.wiring.BundleCapability;
 import org.osgi.framework.wiring.BundleRevision;
 import org.osgi.framework.wiring.BundleWire;
 import org.osgi.framework.wiring.BundleWiring;
@@ -102,6 +103,24 @@ public class WeaverTest {
 			.containsExactlyInAnyOrder("EnglishGreeter", "GermanGreeter");
 		assertThat(loadWith.apply(Greeter.class, getClass().getClassLoader()).stream().map(p -> p.type().getSimpleName()))
 			.containsExactlyInAnyOrder("EnglishGreeter", "GermanGreeter");
+	}
+
+	/**
+	 * Probe: the weaver declares osgi.extender=osgi.serviceloader.processor and
+	 * ...registrar in its own manifest, so that bundles which DO carry Service
+	 * Loader Mediator metadata (slf4j 2) can resolve. The question is whether a
+	 * framework extension's capabilities really become capabilities of the system
+	 * bundle at runtime, or whether only -runsystemcapabilities does the job.
+	 */
+	@Test
+	void extenderCapabilitiesOfTheExtensionAreAttachedToTheSystemBundle() {
+		List<BundleCapability> extenders = context.getBundle(0).adapt(BundleWiring.class)
+			.getCapabilities("osgi.extender");
+
+		assertThat(extenders).filteredOn(c -> c.getRevision().getBundle() == weaver)
+			.as("osgi.extender capabilities of %s seen on the system bundle: %s", WEAVER, extenders)
+			.extracting(c -> c.getAttributes().get("osgi.extender"))
+			.containsExactlyInAnyOrder("osgi.serviceloader.processor", "osgi.serviceloader.registrar");
 	}
 
 	private static BundleWire dynamicImportOfWeaverPackage(Bundle bundle) {

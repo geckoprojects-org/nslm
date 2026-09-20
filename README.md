@@ -94,20 +94,48 @@ The consumers print on activation:
 - `JsonServiceLoaderTest`: `jakarta.json-api` 2.1.3 with Parsson 1.1.7 and `jakarta.json.bind-api` 3.0.0 with Yasson 3.0.4. Yasson's provider asks `JsonProvider.provider()` for its JSON-P implementation, a two level `ServiceLoader` chain through two API bundles. (`jakarta.json.bind-api` 3.0.1 ships an empty `Bundle-SymbolicName`, hence 3.0.0.)
 - `RestAndPersistenceServiceLoaderTest`: `RuntimeDelegate.getInstance()`, `Response.ok().build()` and `UriBuilder` with Jersey 4.0.2 `jersey-common`; the Persistence provider list with EclipseLink 4.0.9. No server, no database, the lookups are the point.
 - `MailAndValidationServiceLoaderTest`: `StreamProvider.provider()` and the `Session` transport and store providers with Angus Mail 2.0.3; a `ValidatorFactory` from Hibernate Validator 8.0.2 (with the `ParameterMessageInterpolator`, so no Expression Language is needed) validating a `@NotNull` violation.
+- `Slf4jServiceLoaderTest`: slf4j 2.0.17 with `slf4j-simple`, the one API here that DOES carry Service Loader Mediator metadata, see [Bundles that bring their own metadata](#bundles-that-bring-their-own-metadata). `LoggerFactory` calls `ServiceLoader.load(SLF4JServiceProvider.class, LoggerFactory.class.getClassLoader())`, the two argument form with the API bundle's own class loader, from inside a third party bundle; the test checks the metadata, that both extender requirements are wired to the system bundle, that the same lookup from the test bundle finds `SimpleServiceProvider`, and that `LoggerFactory.getILoggerFactory()` really returns Simple's factory.
 - `JdkFactoryServiceLoaderTest`: `XMLInputFactory.newInstance()` with Woodstox 7.1.1 installed as a bundle. The lookup runs inside the JDK; it passes under the launcher based mediator and under the weaver with `spi.weaver.tccl=true`.
-- `WeaverTest` (skipped when the weaver is not installed): the extension is resolved and its package exported by the system bundle; consumer and test bundle carry a dynamic import wire to `org.example.spi.weaver` after their call sites ran, i.e. they were really woven; method references `ServiceLoader::load` with one and two parameters work.
+- `WeaverTest` (skipped when the weaver is not installed): the extension is resolved and its package exported by the system bundle; consumer and test bundle carry a dynamic import wire to `org.example.spi.weaver` after their call sites ran, i.e. they were really woven; method references `ServiceLoader::load` with one and two parameters work; and the two `osgi.extender` capabilities the weaver declares are attached to the system bundle by both frameworks.
 
 | bndrun | Framework | Mediator | Tests |
 |---|---|---|---|
-| `test-weaver` | Felix 7.0.5 | weaver (`spi.weaver.tccl=true`) | 27 pass |
-| `test-weaver-equinox` | Equinox 3.23.0 | weaver (`spi.weaver.tccl=true`, `serviceLoaderOnly=false`) | 27 pass |
-| `test-mediator` | Felix 7.0.5 | launcher based | 23 pass, 4 skipped |
-| `test-mediator-equinox` | Equinox 3.23.0 | launcher based | 22 pass, 5 skipped |
-| `test-equinox-extension` | Equinox 3.23.0 | framework extension, standard launcher | 22 pass, 5 skipped |
+| `test-weaver` | Felix 7.0.5 | weaver (`spi.weaver.tccl=true`) | 31 pass |
+| `test-weaver-equinox` | Equinox 3.23.0 | weaver (`spi.weaver.tccl=true`, `serviceLoaderOnly=false`) | 31 pass |
+| `test-mediator` | Felix 7.0.5 | launcher based | 26 pass, 5 skipped |
+| `test-mediator-equinox` | Equinox 3.23.0 | launcher based | 25 pass, 6 skipped |
+| `test-equinox-extension` | Equinox 3.23.0 | framework extension, standard launcher | 25 pass, 6 skipped |
 
-Skipped are the four `WeaverTest` cases wherever nothing is woven, and the guard test wherever no `spi-tccl` is installed (on Equinox the TCCL is the framework's own `ContextFinder`). Tracing is on everywhere (`spi.weaver.trace`, `spi.mediator.trace`, `spi.equinox.trace`); those lines show registry content, woven classes and every lookup.
+Skipped are the five `WeaverTest` cases wherever nothing is woven, and the guard test wherever no `spi-tccl` is installed (on Equinox the TCCL is the framework's own `ContextFinder`). Tracing is on everywhere (`spi.weaver.trace`, `spi.mediator.trace`, `spi.equinox.trace`); those lines show registry content, woven classes and every lookup.
 
-`test-equinox-extension` is the answer to what a mediator needs from its host. On Equinox it needs nothing but the framework class path: the same 22 tests pass with the standard bnd launcher and no bytecode transformation, including the JDK factory lookups, because Equinox's own `ContextFinder` is the TCCL and resolves to a bundle class loader, which is exactly where the `ClassLoaderHook` sits. On Felix the same is impossible. `felix.bootdelegation.classloaders` is read from `m_configMap` (`BundleWiringImpl`), and that map is an unmodifiable copy of what was handed to the `Felix(Map)` constructor, so only the code that creates the framework can put the per bundle class loaders in; Felix has no hook registry and no file based equivalent. Without a launcher, Felix is left with what a framework extension activator can do on its own - set the TCCL - which covers `ServiceLoader.load(X)` and the JDK factory finders, but not `ServiceLoader.load(X, bundleClassLoader)`.
+`test-equinox-extension` is the answer to what a mediator needs from its host. On Equinox it needs nothing but the framework class path: the same 25 tests pass with the standard bnd launcher and no bytecode transformation, including the JDK factory lookups, because Equinox's own `ContextFinder` is the TCCL and resolves to a bundle class loader, which is exactly where the `ClassLoaderHook` sits. On Felix the same is impossible. `felix.bootdelegation.classloaders` is read from `m_configMap` (`BundleWiringImpl`), and that map is an unmodifiable copy of what was handed to the `Felix(Map)` constructor, so only the code that creates the framework can put the per bundle class loaders in; Felix has no hook registry and no file based equivalent. Without a launcher, Felix is left with what a framework extension activator can do on its own - set the TCCL - which covers `ServiceLoader.load(X)` and the JDK factory finders, but not `ServiceLoader.load(X, bundleClassLoader)`.
+
+## Bundles that bring their own metadata
+
+Everything above is about bundles that carry no Service Loader Mediator metadata. The opposite case has to work too, and it is not automatic: a bundle that follows the spec does not resolve unless someone provides the extender capability it asks for. slf4j 2 is the everyday example.
+
+```
+slf4j.api      Require-Capability: osgi.extender;filter:="(&(osgi.extender=osgi.serviceloader.processor)(version>=1.0.0)(!(version>=2.0.0)))",
+                                   osgi.serviceloader;filter:="(osgi.serviceloader=org.slf4j.spi.SLF4JServiceProvider)"
+slf4j.simple   Require-Capability: osgi.extender;filter:="(&(osgi.extender=osgi.serviceloader.registrar)(version>=1.0.0)(!(version>=2.0.0)))"
+               Provide-Capability: osgi.serviceloader;osgi.serviceloader="org.slf4j.spi.SLF4JServiceProvider";register:="org.slf4j.simple.SimpleServiceProvider"
+```
+
+Both requirements are mandatory, so without a processor and a registrar in the system nothing resolves, the bundles never reach RESOLVED and no mediator ever gets the chance to do anything. The `osgi.serviceloader` requirement of the consumer is a different matter: it is satisfied by the provider bundle, exactly as the spec intends, and needs nothing from us.
+
+The weaver declares both extender capabilities in its own manifest, and a framework extension's capabilities really do become capabilities of the system bundle: Felix 7.0.5 and Equinox 3.23.0 both attach them, which `WeaverTest` asserts by looking for capabilities on bundle 0 whose revision belongs to the weaver. At runtime the weaver is therefore a complete answer. The other two deployments are not bundles at all - a `-runpath` jar has no manifest the framework reads - so they cannot announce anything, and the launch configuration has to:
+
+```
+-runsystemcapabilities: \
+	osgi.extender;osgi.extender=osgi.serviceloader.processor;version:Version=1.0.0,\
+	osgi.extender;osgi.extender=osgi.serviceloader.registrar;version:Version=1.0.0
+```
+
+All five bndruns carry that, the weaver runs included, because of the resolver rather than the runtime: to bnd's resolver the weaver is an ordinary resource that provides `osgi.extender`, and left to itself it satisfies slf4j's requirement by adding `org.example.spi.weaver` to the `-runbundles` of the runs that use one of the other two mediators. Declaring the capabilities on the system bundle keeps each run with the mediator it is meant to test.
+
+Honesty about the registrar: claiming `osgi.serviceloader.registrar` here is structural. Providers become visible to `java.util.ServiceLoader`, which is what slf4j and every library like it actually does, but they are not registered as OSGi services the way spec chapter 133 describes and SPI Fly implements. Nothing in this test bed looks for those services. Registering them would be a small addition to the registry - it already knows every provider, its bundle and its class space - and it is the one piece that would make the claim literal.
+
+What the mediators then have to serve is worth spelling out, because it is the hardest of the lookup forms: `LoggerFactory.findServiceProviders()` calls `ServiceLoader.load(SLF4JServiceProvider.class, LoggerFactory.class.getClassLoader())`, the two argument form with the API bundle's own class loader, from inside a third party bundle. The weaver rewrites the call site in `LoggerFactory` itself (two of them: the plain call and the one in the `doPrivileged` lambda). The launcher based mediator and the Equinox extension never see a call site; they answer because the class loader that is passed is a bundle class loader they have hooked. All five runs bind `org.slf4j.simple.SimpleServiceProvider`.
 
 ## Search paths of the Jakarta APIs
 
@@ -168,6 +196,7 @@ How to read the cells: the probe bundle is wired to Greeter 1.0; installed are t
 | Consumer bundle without any metadata | yes | yes | only if listed in `auto.consumers`, else `SPI-Consumer` or `osgi.serviceloader`/`osgi.extender` requirements |
 | Provider bundle with `META-INF/services` only | yes | yes | only if listed in `auto.providers`, else `SPI-Provider` or `osgi.serviceloader` capability |
 | Provider declared only in `module-info` (Tyrus) | yes | yes | no (by design) |
+| Bundle that carries the spec metadata and requires the extender (slf4j 2) | yes, the framework extension declares `osgi.extender=osgi.serviceloader.processor` and `...registrar` itself | yes, but the extender capabilities have to come from `-runsystemcapabilities` | yes (by design) |
 | `load(Class)` direct, in a lambda, in a nested class; `load(Class, ClassLoader)` | 2 of 2 | 2 of 2 | 2 of 2 |
 | Method reference `ServiceLoader::load` | 2 of 2 (bootstrap argument redirected) | 2 of 2 | **0 of 2** (rewrites call instructions only) |
 | `ServiceLoader` inside a library bundle (jakarta.xml.bind, websocket-client) | yes | yes | if the library carries metadata or is listed in `auto.consumers` |

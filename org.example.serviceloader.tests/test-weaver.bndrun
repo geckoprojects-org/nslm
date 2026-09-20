@@ -3,6 +3,20 @@
 -runfw: org.apache.felix.framework;version='[7.0.5,7.0.5]'
 -runee: JavaSE-25
 
+# slf4j-api 2 and its providers are the common case of bundles that DO carry OSGi Service Loader
+# Mediator metadata: slf4j.api requires osgi.extender=osgi.serviceloader.processor plus
+# osgi.serviceloader=org.slf4j.spi.SLF4JServiceProvider, slf4j.simple requires
+# osgi.extender=osgi.serviceloader.registrar. Without a provider of those extender capabilities OSGi
+# does not resolve them at all, so the launch configuration declares them on the system bundle. The
+# weaver carries the same two capabilities in its own manifest and they really do end up on the system
+# bundle at runtime (WeaverTest checks that on Felix and Equinox), but the bnd resolver treats the
+# framework extension as an ordinary resource: left to itself it would pull org.example.spi.weaver into
+# the runs that use another mediator. The osgi.serviceloader capability itself comes from the provider
+# bundle, as the spec intends.
+-runsystemcapabilities: \
+	osgi.extender;osgi.extender=osgi.serviceloader.processor;version:Version=1.0.0,\
+	osgi.extender;osgi.extender=osgi.serviceloader.registrar;version:Version=1.0.0
+
 # Weaving mediator: standard bnd launcher, NO -runpath additions. org.example.spi.weaver is a
 # framework extension bundle (ExtensionBundle-Activator + WeavingHook, java.lang.classfile) that
 # redirects every ServiceLoader.load call site to ServiceLoaders.load.
@@ -100,4 +114,6 @@
 	org.eclipse.angus.mail;version='[2.0.3,2.0.4)',\
 	org.hibernate.validator;version='[8.0.2,8.0.3)',\
 	org.jboss.logging.jboss-logging;version='[3.5.3,3.5.4)',\
-	org.example.serviceloader.consumer.rb;version='[1.0.0,1.0.1)'
+	org.example.serviceloader.consumer.rb;version='[1.0.0,1.0.1)',\
+	slf4j.api;version='[2.0.17,2.0.18)',\
+	slf4j.simple;version='[2.0.17,2.0.18)'
