@@ -17,6 +17,7 @@
   <modules>
     <module>org.example.spi.core</module>
     <module>org.example.spi.weaver</module>
+    <module>org.example.spi.weaver.java21</module>
     <module>org.example.spi.launcher</module>
     <module>org.example.spi.mediator</module>
     <module>org.example.spi.equinox</module>
@@ -115,6 +116,11 @@
       <dependency>
         <groupId>org.example.spi</groupId>
         <artifactId>org.example.spi.weaver</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.example.spi</groupId>
+        <artifactId>org.example.spi.weaver.java21</artifactId>
         <version>${revision}</version>
       </dependency>
       <dependency>

@@ -11,13 +11,8 @@
   <artifactId>org.example.spi.weaver</artifactId>
   <name>ServiceLoader weaving mediator (framework extension)</name>
   <description>Framework extension bundle with a WeavingHook that redirects ServiceLoader.load to
-    ServiceLoaders.load. Works with any launcher. Built for Java 21; only the optional call site
-    technique (src/main/java25, java.lang.classfile) is a Java 25 class.</description>
-
-  <properties>
-    <!-- the core is embedded, see its pom -->
-    <maven.compiler.release>21</maven.compiler.release>
-  </properties>
+    ServiceLoaders.load. Works with any launcher. Java 25; org.example.spi.weaver.java21 builds the
+    same sources for Java 21, without the call site technique.</description>
 
   <dependencies>
     <dependency>
@@ -35,26 +30,6 @@
 
   <build>
     <plugins>
-      <!-- CallSiteWeaver needs the Class-File API (final in Java 24): a second compilation for Java 25
-           into the same output directory, loaded by name only when spi.weaver.technique=callsite -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>java25</id>
-            <goals>
-              <goal>compile</goal>
-            </goals>
-            <configuration>
-              <release>25</release>
-              <compileSourceRoots>
-                <compileSourceRoot>${project.basedir}/src/main/java25</compileSourceRoot>
-              </compileSourceRoots>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
       <plugin>
         <groupId>biz.aQute.bnd</groupId>
         <artifactId>bnd-maven-plugin</artifactId>

@@ -46,6 +46,8 @@ import org.osgi.test.junit5.context.BundleContextExtension;
 public class WeaverTest {
 
 	static final String WEAVER = "org.example.spi.weaver";
+	/** the Java 21 variant, same sources without the call site technique */
+	static final String WEAVER_JAVA21 = "org.example.spi.weaver.java21";
 	static final String WEAVER_PACKAGE = "org.example.spi.weaver";
 
 	@InjectBundleContext
@@ -56,7 +58,7 @@ public class WeaverTest {
 	@BeforeEach
 	void weaverInstalled() {
 		for (Bundle bundle : context.getBundles()) {
-			if (WEAVER.equals(bundle.getSymbolicName())) {
+			if (WEAVER.equals(bundle.getSymbolicName()) || WEAVER_JAVA21.equals(bundle.getSymbolicName())) {
 				weaver = bundle;
 			}
 		}
@@ -118,7 +120,7 @@ public class WeaverTest {
 			.getCapabilities("osgi.extender");
 
 		assertThat(extenders).filteredOn(c -> c.getRevision().getBundle() == weaver)
-			.as("osgi.extender capabilities of %s seen on the system bundle: %s", WEAVER, extenders)
+			.as("osgi.extender capabilities of %s seen on the system bundle: %s", weaver.getSymbolicName(), extenders)
 			.extracting(c -> c.getAttributes().get("osgi.extender"))
 			.containsExactlyInAnyOrder("osgi.serviceloader.processor", "osgi.serviceloader.registrar");
 	}

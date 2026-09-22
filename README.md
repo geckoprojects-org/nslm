@@ -4,10 +4,10 @@ Plain `java.util.ServiceLoader` across OSGi bundles that carry **no** OSGi Servi
 
 | Variant | Module | Mechanism | Needs |
 |---|---|---|---|
-| **Weaver** | `org.example.spi.weaver` | Framework extension with a `WeavingHook` (Class-File API) that redirects `ServiceLoader.load` call sites | any launcher, a framework with framework extensions |
+| **Weaver** | `org.example.spi.weaver` (Java 25), `org.example.spi.weaver.java21` | Framework extension with a `WeavingHook` that redirects `ServiceLoader.load` in the constant pool (or rewrites the call sites) | any launcher, a framework with framework extensions |
 | **Launcher based mediator** | `org.example.spi.mediator` | `-runpath` jar that makes a registry aware class loader the thread context class loader and hooks the bundle class loaders of Felix and Equinox; nothing is woven | the extended bnd launcher `org.example.spi.launcher` |
 
-Java 25 (the weaver and the core it embeds are built for Java 21, see [The weaver](#the-weaver)), bnd 7.4.0 Maven plugins and tester, JUnit 5.14, OSGi Test 1.3, Maven wrapper included.
+Java 25 (plus a Java 21 variant of the weaver, see [The weaver](#the-weaver)), bnd 7.4.0 Maven plugins and tester, JUnit 5.14, OSGi Test 1.3, Maven wrapper included.
 
 ```bash
 ./mvnw clean install                                   # build everything, run all OSGi test runs and the benchmark
@@ -23,6 +23,7 @@ Java 25 (the weaver and the core it embeds are built for Java 21, see [The weave
 |---|---|
 | `org.example.spi.core` | `SpiRegistry`, `SpiClassLoader`, `Tracing`. Shared by both mediators as an embedded private package, never deployed on its own. |
 | `org.example.spi.weaver` | Framework extension bundle: `SpiWeaver` (`ExtensionBundle-Activator`), `ServiceLoaderWeavingHook`, `SpiLoaders`, exported `ServiceLoaders`. |
+| `org.example.spi.weaver.java21` | The same sources and `bnd.bnd` built for Java 21, without `CallSiteWeaver` (constant pool technique only). |
 | `org.example.spi.launcher` | A clone of bnd's launcher `biz.aQute.launcher` 7.4.0 (sources from Maven Central, unchanged apart from one addition) plus `aQute.launcher.spi.LauncherExtension`, a hook that runs before the framework is created. Replaces the built-in launcher when listed in `-runpath` (bnd takes the first runpath jar with a `Launcher-Plugin` header). |
 | `org.example.spi.mediator` | `SpiMediator` (`Embedded-Activator` and `LauncherExtension`), `FelixAdapter`, `EquinoxAdapter`. |
 | `org.example.spi.equinox` | Equinox only, and the smallest deployment of the three: `ServiceLoaderHookConfigurator` announced by a `hookconfigurators.properties` on the framework class path. No launcher, no weaving, not even a bundle. |
@@ -57,7 +58,7 @@ MethodRef -> Class java/util/ServiceLoader, load:(Ljava/lang/Class;)Ljava/util/S
 
 The new `Utf8` and `Class` entries are appended, so every existing index stays valid: no instruction, stack map frame, descriptor or attribute changes, and the return type is still `java.util.ServiceLoader`. A method reference `ServiceLoader::load` is redirected with the call sites, because its `MethodHandle` constant points to the same `MethodRef`. `ServiceLoaders.load(Class)` finds the calling class as the first frame below it (hidden frames included: the lambda class of a method reference lives in the class loader of the class that holds the reference; `java.lang.invoke` frames are skipped). This is the targeted variant of the constant pool rewriting proposed by aicas (osgi/osgi#955): aicas renames the class `java/util/ServiceLoader` everywhere in the pool, so the woven class works with a proxy type that is not a `java.util.ServiceLoader` (a `NoSuchMethodError` as soon as the type crosses a class boundary, a re-implemented API without `stream()`); here only the two static entry points move, and the result is the real JDK `ServiceLoader`. Only the pool is parsed, whose format has not changed since Java 11; an unknown entry type leaves the class alone.
 
-**`callsite`** rewrites the instructions with the Class-File API (`java.lang.classfile`, Java 24+, no ASM). It lives in `CallSiteWeaver`, the only Java 25 class of the weaver (`src/main/java25`, a second compiler execution), which the hook loads by name only when this technique is configured; on an older JVM it falls back to `cpool` and traces why. Everything else of the weaver and of the embedded core is built for Java 21 (`osgi.ee` 21 in the manifest; bnd's derived `osgi.ee` is switched off because it would follow the one Java 25 class). The weaver runs pass on a Java 21 JVM with everything built for release 21, and with `spi.weaver.technique=callsite` there the fallback is taken.
+**`callsite`** rewrites the instructions with the Class-File API (`java.lang.classfile`, Java 24+, no ASM). It lives in `CallSiteWeaver`, which the hook loads by name only when this technique is configured and which is left out of the Java 21 variant (below); when it cannot be loaded, the hook falls back to `cpool` and traces why.
 
 ```
 invokestatic java/util/ServiceLoader.load(Class)ServiceLoader
@@ -70,6 +71,8 @@ invokestatic java/util/ServiceLoader.load(Class, ClassLoader)ServiceLoader
 ```
 
 The calling class is pushed as a constant, so the consumer bundle is exact without any stack inspection. A method reference `ServiceLoader::load` has no call instruction; its `LambdaMetafactory` bootstrap argument is redirected to `ServiceLoaders.loadFrom(Class caller, ...)` and the calling class becomes the captured argument (call sites without other captures only). Stack maps are regenerated for changed methods.
+
+**Java 21 variant.** `org.example.spi.weaver` is built for Java 25. `org.example.spi.weaver.java21` builds the same sources (copied without `CallSiteWeaver`) and the same `bnd.bnd` (`-include`) for Java 21, as a bundle of its own symbolic name, so both can sit in one repository; it always uses `cpool`. The core is built for Java 21 because both variants embed it (`StackWalker.Option.DROP_METHOD_INFO` is looked up by name and used from Java 22 on). `test-weaver-java21.bndrun` and `test-weaver-java21-equinox.bndrun` run all tests with the variant and request `callsite` on purpose to exercise the fallback. On a real Java 21 JVM (everything but the Java 25 weaver built with `-Dmaven.compiler.release=21`, tests run with a Java 21 `JAVA_HOME`) both runs pass as well.
 
 Both techniques share two pre filters that keep the cost for the bulk of classes near zero: the raw bytes must contain `java/util/ServiceLoader`, the constant pool a `MethodRef` to `ServiceLoader.load`. The hook never throws, since a throwing `WeavingHook` is blacklisted; a failure leaves the class unwoven and is traced. All tests pass with either technique on Felix and Equinox.
 
@@ -180,7 +183,7 @@ The one use case that needs a mediator is a **provider that is a bundle**, Woods
 ## Weaver vs. launcher based mediator
 
 - **Weaver, pro:** any launcher, any framework with framework extensions, one bundle, nothing to configure. Exact caller (a constant with `callsite`, the frame directly below with `cpool`), no TCCL involved, immune to code running with a foreign TCCL. Fastest on the common path; the returned `ServiceLoader` keeps working after the call (`stream()`, `iterator()`, `reload()`). No third party dependency, no ASM version to chase.
-- **Weaver, con:** bytecode changes at class load time (with `cpool` two constant pool entries, with `callsite` two call patterns plus method reference bootstrap arguments). Only call sites in bundle classes are covered; bundle providers for JDK internal lookups need the `spi.weaver.tccl` option, which is best effort. With `callsite`, method references with captured arguments stay unwoven (traced) and that technique needs Java 25; the weaver itself runs on Java 21.
+- **Weaver, con:** bytecode changes at class load time (with `cpool` two constant pool entries, with `callsite` two call patterns plus method reference bootstrap arguments). Only call sites in bundle classes are covered; bundle providers for JDK internal lookups need the `spi.weaver.tccl` option, which is best effort. With `callsite`, method references with captured arguments stay unwoven (traced); that technique needs Java 24+, the Java 21 variant of the weaver has `cpool` only.
 - **Launcher based mediator, pro:** no bytecode touched, stack traces and signatures untouched. Covers every `ServiceLoader` use that ends in `getResources`/`loadClass`: direct calls, method references, JDK internals, generated code, explicit bundle class loaders. The only one of the three that handles all probes.
 - **Launcher based mediator, con:** needs the extended bnd launcher until bnd has `LauncherExtension` upstream. One adapter per framework for the bundle class loader path. `StackWalker` on the TCCL path (about 1 µs); a thread with a foreign TCCL bypasses that path. On Equinox the TCCL path pays for the `ContextFinder`, the slowest measured mediated path.
 - **Rule of thumb:** weaver by default; launcher based mediator when bytecode must stay untouched or `ServiceLoader` is used from places the weaver cannot reach. They share the registry implementation, not an instance.

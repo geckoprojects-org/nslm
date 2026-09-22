@@ -43,10 +43,11 @@ import org.osgi.framework.wiring.BundleWiring;
 
 /**
  * The {@code callsite} technique of {@link ServiceLoaderWeavingHook}, with the
- * Class-File API ({@code java.lang.classfile}, final in Java 24). This is the
- * only class of the weaver built for Java 25 ({@code src/main/java25}); the hook
- * loads it by name when {@code spi.weaver.technique=callsite} is configured and
- * falls back to the constant pool technique on an older JVM.
+ * Class-File API ({@code java.lang.classfile}, final in Java 24). The hook loads
+ * it by name when {@code spi.weaver.technique=callsite} is configured, so that
+ * the same sources also build the Java 21 variant
+ * {@code org.example.spi.weaver.java21}, which leaves this class out; there the
+ * hook falls back to the constant pool technique.
  * <pre>
  * invokestatic java/util/ServiceLoader.load:(Class)ServiceLoader
  *   ->  ldc ThisClass

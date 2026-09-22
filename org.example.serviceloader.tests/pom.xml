@@ -202,6 +202,11 @@
     </dependency>
     <dependency>
       <groupId>org.example.spi</groupId>
+      <artifactId>org.example.spi.weaver.java21</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
       <artifactId>org.example.spi.launcher</artifactId>
       <scope>runtime</scope>
     </dependency>
@@ -460,6 +465,8 @@
           <bndruns>
             <bndrun>test-weaver.bndrun</bndrun>
             <bndrun>test-weaver-equinox.bndrun</bndrun>
+            <bndrun>test-weaver-java21.bndrun</bndrun>
+            <bndrun>test-weaver-java21-equinox.bndrun</bndrun>
             <bndrun>test-mediator.bndrun</bndrun>
             <bndrun>test-mediator-equinox.bndrun</bndrun>
             <bndrun>test-equinox-extension.bndrun</bndrun>
@@ -482,6 +489,8 @@
               <bndruns>
                 <bndrun>test-weaver.bndrun</bndrun>
                 <bndrun>test-weaver-equinox.bndrun</bndrun>
+                <bndrun>test-weaver-java21.bndrun</bndrun>
+                <bndrun>test-weaver-java21-equinox.bndrun</bndrun>
                 <bndrun>test-mediator.bndrun</bndrun>
                 <bndrun>test-mediator-equinox.bndrun</bndrun>
                 <bndrun>test-equinox-extension.bndrun</bndrun>

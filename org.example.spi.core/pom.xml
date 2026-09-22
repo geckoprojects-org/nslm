@@ -14,7 +14,7 @@
     Plain jar, embedded by both as a private package; never deployed on its own.</description>
 
   <properties>
-    <!-- embedded by the weaver, which is built for Java 21 -->
+    <!-- embedded by both weaver variants, org.example.spi.weaver (Java 25) and org.example.spi.weaver.java21 -->
     <maven.compiler.release>21</maven.compiler.release>
   </properties>
 

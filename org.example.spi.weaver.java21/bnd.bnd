@@ -1,0 +1,8 @@
+# The Java 21 variant of org.example.spi.weaver: same classes except CallSiteWeaver (the hook falls
+# back to the constant pool technique), same manifest instructions. The Bundle-SymbolicName comes
+# from the artifactId, so both variants can sit in one repository. The ~ keeps the headers set here.
+-include: ~${.}/../org.example.spi.weaver/bnd.bnd
+
+Bundle-Description: java.util.ServiceLoader across bundles without metadata, Java 21 variant: \
+	WeavingHook that redirects ServiceLoader.load to ServiceLoaders.load in the constant pool, \
+	backed by the META-INF/services registry of org.example.spi.core.

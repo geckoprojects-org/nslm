@@ -27,8 +27,7 @@ import org.osgi.framework.wiring.BundleWiring;
 
 /**
  * Redirects the two static {@code java.util.ServiceLoader.load} methods to
- * {@link ServiceLoaders}, with one of two techniques. The weaver is built for
- * Java 21.
+ * {@link ServiceLoaders}, with one of two techniques.
  * <p>
  * <b>{@code cpool}</b> (default, {@link ConstantPoolPatcher}): the MethodRef
  * entries {@code java/util/ServiceLoader.load:(Class)ServiceLoader} and
@@ -42,8 +41,9 @@ import org.osgi.framework.wiring.BundleWiring;
  * <p>
  * <b>{@code callsite}</b> ({@link ClassWeaver} {@code CallSiteWeaver}, Class-File
  * API, Java 24+): the call instructions are rewritten to pass the calling class
- * as a constant. The only Java 25 class of the weaver, loaded by name on
- * request; on an older JVM the hook falls back to {@code cpool}.
+ * as a constant. Loaded by name on request; the Java 21 variant
+ * {@code org.example.spi.weaver.java21} does not contain it, and the hook falls
+ * back to {@code cpool}.
  * <p>
  * Nothing else is touched: no other descriptor, no {@code loadInstalled} or
  * {@code load(ModuleLayer, Class)}. Two cheap pre filters (the UTF8 string
@@ -140,8 +140,9 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 	}
 
 	/**
-	 * {@code CallSiteWeaver} is a Java 25 class file (Class-File API); loading it
-	 * on an older JVM fails with an {@link UnsupportedClassVersionError}.
+	 * {@code CallSiteWeaver} uses the Class-File API: missing in the Java 21
+	 * variant of the weaver, and a Java 25 class file that an older JVM rejects
+	 * with an {@link UnsupportedClassVersionError}.
 	 *
 	 * @return the call site technique, or {@code null} if it is not available
 	 */
@@ -152,7 +153,7 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 				.getDeclaredConstructor(Tracing.class)
 				.newInstance(trace);
 		} catch (ReflectiveOperationException | LinkageError e) {
-			trace.trace("technique callsite not available on Java %d (%s), using cpool", Runtime.version().feature(), e);
+			trace.trace("technique callsite not available (Java %d, %s), using cpool", Runtime.version().feature(), e);
 			return null;
 		}
 	}
