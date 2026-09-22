@@ -37,9 +37,10 @@ import org.osgi.framework.hooks.weaving.WeavingHook;
  * <li>{@code spi.weaver.serviceLoaderOnly} (default true): mediate only what a
  * {@code java.util.ServiceLoader} reads; false also serves a library that scans
  * {@code META-INF/services} itself</li>
- * <li>{@code spi.weaver.technique} (default {@code cpool}, alternative
- * {@code callsite}): how the {@code ServiceLoader.load} calls are redirected,
- * see {@link ServiceLoaderWeavingHook}</li>
+ * <li>{@code spi.weaver.technique} (default {@code callsite}, alternative
+ * {@code cpool}; the Java 21 variant always uses {@code cpool}): how the
+ * {@code ServiceLoader.load} calls are redirected, see
+ * {@link ServiceLoaderWeavingHook}</li>
  * <li>{@code spi.weaver.tccl} (default false): additionally install a
  * {@link SpiClassLoader} in TCCL mode as thread context class loader of the
  * thread that activates the extension (the launcher thread; every thread

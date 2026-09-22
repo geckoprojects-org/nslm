@@ -18,8 +18,8 @@
 	osgi.extender;osgi.extender=osgi.serviceloader.registrar;version:Version=1.0.0
 
 # Java 21 variant of the weaving mediator (org.example.spi.weaver.java21: same sources without
-# CallSiteWeaver, built for Java 21). spi.weaver.technique=callsite is requested on purpose: the
-# variant does not contain it, and the hook must fall back to the constant pool technique.
+# CallSiteWeaver, built for Java 21). spi.weaver.technique=callsite (also the default) is requested
+# explicitly: the variant does not contain it, and the hook must fall back to the constant pool technique.
 # Otherwise the same run as the Java 25 weaver.
 # Weaving mediator: standard bnd launcher, NO -runpath additions. org.example.spi.weaver is a
 # framework extension bundle (ExtensionBundle-Activator + WeavingHook, java.lang.classfile) that

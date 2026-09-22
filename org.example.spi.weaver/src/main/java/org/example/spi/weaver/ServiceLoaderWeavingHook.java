@@ -30,7 +30,8 @@ import org.osgi.framework.wiring.BundleWiring;
  * Redirects the two static {@code java.util.ServiceLoader.load} methods to
  * {@link ServiceLoaders}, with one of two techniques.
  * <p>
- * <b>{@code cpool}</b> (default, {@link ConstantPoolPatcher}): the MethodRef
+ * <b>{@code cpool}</b> ({@link ConstantPoolPatcher}; the only technique of the
+ * Java 21 variant): the MethodRef
  * entries {@code java/util/ServiceLoader.load:(Class)ServiceLoader} and
  * {@code load:(Class, ClassLoader)ServiceLoader} get a new owner class entry
  * {@code org/example/spi/weaver/ServiceLoaders}, appended to the constant pool.
@@ -40,9 +41,10 @@ import org.osgi.framework.wiring.BundleWiring;
  * points to the same entry. {@link ServiceLoaders} finds the calling class on
  * the stack (the frame directly below it).
  * <p>
- * <b>{@code callsite}</b> ({@link ClassWeaver} {@code CallSiteWeaver}, Class-File
- * API, Java 24+): the call instructions are rewritten to pass the calling class
- * as a constant. Loaded by name on request; the Java 21 variant
+ * <b>{@code callsite}</b> (default, {@link ClassWeaver} {@code CallSiteWeaver},
+ * Class-File API, Java 24+): the call instructions are rewritten to pass the
+ * calling class as a constant, no stack walk (about 1 µs per call less than
+ * {@code cpool}). Loaded by name on request; the Java 21 variant
  * {@code org.example.spi.weaver.java21} does not contain it, and the hook falls
  * back to {@code cpool}.
  * <p>
@@ -82,9 +84,13 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 	enum Technique {
 		CPOOL, CALLSITE;
 
-		/** @return the technique named by {@code value}, {@link #CPOOL} if {@code null} */
+		/**
+		 * @return the technique named by {@code value}, {@link #CALLSITE} if
+		 *         {@code null}; the hook falls back to {@link #CPOOL} where call site
+		 *         weaving is not available
+		 */
 		static Technique of(String value) {
-			return value == null || value.isBlank() ? CPOOL : valueOf(value.trim().toUpperCase(Locale.ROOT));
+			return value == null || value.isBlank() ? CALLSITE : valueOf(value.trim().toUpperCase(Locale.ROOT));
 		}
 	}
 
