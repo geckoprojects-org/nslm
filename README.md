@@ -46,7 +46,18 @@ Export-Package: org.example.spi.weaver;version=1.0.0
 
 A weaving mediator must be active before the first consumer class is loaded. A framework extension is attached when it is installed, and Felix and Equinox run its activator right away with the system bundle context, before any regular bundle starts (the bnd launcher installs everything before it starts anything). No start level, no `osgi.extender` requirement. The exported package becomes an export of the system bundle; woven classes get a `DynamicImport-Package` on it.
 
-The hook rewrites exactly two call sites with the Class-File API (`java.lang.classfile`, Java 24+, no ASM):
+The hook redirects the two static methods `ServiceLoader.load(Class)` and `load(Class, ClassLoader)` to `org.example.spi.weaver.ServiceLoaders`, with one of two techniques (`spi.weaver.technique`).
+
+**`cpool`** (default) patches only the constant pool, without any bytecode library:
+
+```
+MethodRef -> Class java/util/ServiceLoader, load:(Ljava/lang/Class;)Ljava/util/ServiceLoader;
+    ->  MethodRef -> Class org/example/spi/weaver/ServiceLoaders (appended), same NameAndType
+```
+
+The new `Utf8` and `Class` entries are appended, so every existing index stays valid: no instruction, stack map frame, descriptor or attribute changes, and the return type is still `java.util.ServiceLoader`. A method reference `ServiceLoader::load` is redirected with the call sites, because its `MethodHandle` constant points to the same `MethodRef`. `ServiceLoaders.load(Class)` finds the calling class as the first frame below it (hidden frames included: the lambda class of a method reference lives in the class loader of the class that holds the reference; `java.lang.invoke` frames are skipped). This is the targeted variant of the constant pool rewriting proposed by aicas (osgi/osgi#955): aicas renames the class `java/util/ServiceLoader` everywhere in the pool, so the woven class works with a proxy type that is not a `java.util.ServiceLoader` (a `NoSuchMethodError` as soon as the type crosses a class boundary, a re-implemented API without `stream()`); here only the two static entry points move, and the result is the real JDK `ServiceLoader`. Only the pool is parsed, whose format has not changed since Java 11; an unknown entry type leaves the class alone.
+
+**`callsite`** rewrites the instructions with the Class-File API (`java.lang.classfile`, Java 24+, no ASM):
 
 ```
 invokestatic java/util/ServiceLoader.load(Class)ServiceLoader
@@ -58,11 +69,13 @@ invokestatic java/util/ServiceLoader.load(Class, ClassLoader)ServiceLoader
         invokestatic org/example/spi/weaver/ServiceLoaders.load(Class, ClassLoader, Class)ServiceLoader
 ```
 
-The calling class is pushed as a constant, so the consumer bundle is exact without any stack inspection. A method reference `ServiceLoader::load` has no call instruction; its `LambdaMetafactory` bootstrap argument is redirected to `ServiceLoaders.loadFrom(Class caller, ...)` and the calling class becomes the captured argument (call sites without other captures only). Two pre filters keep the cost for the bulk of classes near zero: the raw bytes must contain `java/util/ServiceLoader`, the constant pool a `MethodRef` to `ServiceLoader.load`. Stack maps are regenerated for changed methods only. The hook never throws, since a throwing `WeavingHook` is blacklisted; a failure leaves the class unwoven and is traced.
+The calling class is pushed as a constant, so the consumer bundle is exact without any stack inspection. A method reference `ServiceLoader::load` has no call instruction; its `LambdaMetafactory` bootstrap argument is redirected to `ServiceLoaders.loadFrom(Class caller, ...)` and the calling class becomes the captured argument (call sites without other captures only). Stack maps are regenerated for changed methods.
 
-`ServiceLoaders.load(type, caller)` returns `java.util.ServiceLoader.load(type, spiLoader)`, a real JDK `ServiceLoader` with a `SpiClassLoader` bound to the consumer bundle (cached per bundle wiring) in front of the consumer's bundle class loader or the explicitly passed loader. Without an active registry or for a non-bundle caller the call falls back to the plain JDK call.
+Both techniques share two pre filters that keep the cost for the bulk of classes near zero: the raw bytes must contain `java/util/ServiceLoader`, the constant pool a `MethodRef` to `ServiceLoader.load`. The hook never throws, since a throwing `WeavingHook` is blacklisted; a failure leaves the class unwoven and is traced. All tests pass with either technique on Felix and Equinox.
 
-Properties: `spi.weaver.enabled` (default true), `spi.weaver.trace`, `spi.weaver.providerStates` (`resolved`, the default, or `active`), `spi.weaver.serviceLoaderOnly` (default true, see `ServiceLoaderCallers` above; set it to false to also serve a library that scans `META-INF/services` itself, such as Jersey's `ServiceFinder`), `spi.weaver.tccl` (default false): additionally make a TCCL mode `SpiClassLoader` the thread context class loader of the activating thread, which with the bnd launcher is the launching thread, inherited by every thread created afterwards. That is what makes bundle providers visible to the `ServiceLoader` calls inside the JDK (JAXP, StAX, ImageIO, JNDI) that cannot be woven, see [ServiceLoader calls inside the JDK](#serviceloader-calls-inside-the-jdk). Best effort: threads the framework created earlier keep their TCCL; the previous TCCL becomes the parent, so Equinox's `ContextFinder` stays in the chain.
+`ServiceLoaders.load(type, caller)` returns `java.util.ServiceLoader.load(type, spiLoader)`, a real JDK `ServiceLoader` with a `SpiClassLoader` bound to the consumer bundle (cached per bundle wiring, all dropped when any bundle is unresolved, updated or uninstalled: the loader is the initiating loader of the provider classes it served, and the JVM would keep answering with the classes of a replaced provider) in front of the consumer's bundle class loader or the explicitly passed loader. Without an active registry or for a non-bundle caller the call falls back to the plain JDK call.
+
+Properties: `spi.weaver.enabled` (default true), `spi.weaver.trace`, `spi.weaver.technique` (`cpool`, the default, or `callsite`), `spi.weaver.providerStates` (`resolved`, the default, or `active`), `spi.weaver.serviceLoaderOnly` (default true, see `ServiceLoaderCallers` above; set it to false to also serve a library that scans `META-INF/services` itself, such as Jersey's `ServiceFinder`), `spi.weaver.tccl` (default false): additionally make a TCCL mode `SpiClassLoader` the thread context class loader of the activating thread, which with the bnd launcher is the launching thread, inherited by every thread created afterwards. That is what makes bundle providers visible to the `ServiceLoader` calls inside the JDK (JAXP, StAX, ImageIO, JNDI) that cannot be woven, see [ServiceLoader calls inside the JDK](#serviceloader-calls-inside-the-jdk). Best effort: threads the framework created earlier keep their TCCL; the previous TCCL becomes the parent, so Equinox's `ContextFinder` stays in the chain.
 
 ## The launcher based mediator
 
@@ -166,8 +179,8 @@ The one use case that needs a mediator is a **provider that is a bundle**, Woods
 
 ## Weaver vs. launcher based mediator
 
-- **Weaver, pro:** any launcher, any framework with framework extensions, one bundle, nothing to configure. Exact caller from a constant, no TCCL involved, immune to code running with a foreign TCCL. Fastest on the common path; the returned `ServiceLoader` keeps working after the call (`stream()`, `iterator()`, `reload()`). No third party dependency, no ASM version to chase.
-- **Weaver, con:** bytecode changes at class load time (two call patterns plus method reference bootstrap arguments). Only call sites in bundle classes are covered; bundle providers for JDK internal lookups need the `spi.weaver.tccl` option, which is best effort. Method references with captured arguments stay unwoven (traced). Needs Java 24 or newer for the weaver itself.
+- **Weaver, pro:** any launcher, any framework with framework extensions, one bundle, nothing to configure. Exact caller (a constant with `callsite`, the frame directly below with `cpool`), no TCCL involved, immune to code running with a foreign TCCL. Fastest on the common path; the returned `ServiceLoader` keeps working after the call (`stream()`, `iterator()`, `reload()`). No third party dependency, no ASM version to chase.
+- **Weaver, con:** bytecode changes at class load time (with `cpool` two constant pool entries, with `callsite` two call patterns plus method reference bootstrap arguments). Only call sites in bundle classes are covered; bundle providers for JDK internal lookups need the `spi.weaver.tccl` option, which is best effort. With `callsite`, method references with captured arguments stay unwoven (traced) and the weaver itself needs Java 24 or newer.
 - **Launcher based mediator, pro:** no bytecode touched, stack traces and signatures untouched. Covers every `ServiceLoader` use that ends in `getResources`/`loadClass`: direct calls, method references, JDK internals, generated code, explicit bundle class loaders. The only one of the three that handles all probes.
 - **Launcher based mediator, con:** needs the extended bnd launcher until bnd has `LauncherExtension` upstream. One adapter per framework for the bundle class loader path. `StackWalker` on the TCCL path (about 1 µs); a thread with a foreign TCCL bypasses that path. On Equinox the TCCL path pays for the `ContextFinder`, the slowest measured mediated path.
 - **Rule of thumb:** weaver by default; launcher based mediator when bytecode must stay untouched or `ServiceLoader` is used from places the weaver cannot reach. They share the registry implementation, not an instance.
@@ -178,11 +191,11 @@ SPI Fly is the reference implementation of the OSGi Service Loader Mediator spec
 
 | | SPI Fly | Weaver here | Launcher based mediator here |
 |---|---|---|---|
-| Caller | woven class constant | woven class constant | bundle loader hooks, `StackWalker` on the TCCL path |
+| Caller | woven class constant | frame below `ServiceLoaders` (`cpool`) or woven class constant (`callsite`) | bundle loader hooks, `StackWalker` on the TCCL path |
 | Provider discovery | `SPI-Provider` / `osgi.serviceloader` capability / `auto.providers` | `META-INF/services` and `module-info` of every resolved bundle | same |
 | Consumer filter | `SPI-Consumer` / `osgi.serviceloader` requirement / `auto.consumers` | class space via package capability | same |
 | Start ordering | `osgi.extender` requirement, or framework extension | framework extension | runs before the framework |
-| Byte code engine | ASM (framework extension 1.3.7 embeds one that stops at Java 22 class files; the dynamic bundle takes an external ASM, 9.8 reads Java 25, 9.10 Java 27) | `java.lang.classfile` | none |
+| Byte code engine | ASM (framework extension 1.3.7 embeds one that stops at Java 22 class files; the dynamic bundle takes an external ASM, 9.8 reads Java 25, 9.10 Java 27) | none, constant pool patch (`cpool`), or `java.lang.classfile` (`callsite`) | none |
 | Result of `load(Class)` | plain `ServiceLoader` under a temporarily switched TCCL | `ServiceLoader` with a bound `SpiClassLoader` | plain `ServiceLoader`, TCCL is the `SpiClassLoader` |
 
 ## Where each one works
@@ -198,7 +211,7 @@ How to read the cells: the probe bundle is wired to Greeter 1.0; installed are t
 | Provider declared only in `module-info` (Tyrus) | yes | yes | no (by design) |
 | Bundle that carries the spec metadata and requires the extender (slf4j 2) | yes, the framework extension declares `osgi.extender=osgi.serviceloader.processor` and `...registrar` itself | yes, but the extender capabilities have to come from `-runsystemcapabilities` | yes (by design) |
 | `load(Class)` direct, in a lambda, in a nested class; `load(Class, ClassLoader)` | 2 of 2 | 2 of 2 | 2 of 2 |
-| Method reference `ServiceLoader::load` | 2 of 2 (bootstrap argument redirected) | 2 of 2 | **0 of 2** (rewrites call instructions only) |
+| Method reference `ServiceLoader::load` | 2 of 2 (method handle constant redirected with the pool entry, or bootstrap argument redirected) | 2 of 2 | **0 of 2** (rewrites call instructions only) |
 | `ServiceLoader` inside a library bundle (jakarta.xml.bind, websocket-client) | yes | yes | if the library carries metadata or is listed in `auto.consumers` |
 | Bundle provider for a `ServiceLoader` call inside the JDK (`XMLInputFactory.newInstance()`, Woodstox as bundle) | JDK default; **Woodstox with `spi.weaver.tccl=true`** | Woodstox | JDK default; only an `SPI-Consumer: <class>#<method>()` header would help |
 | Two versions of the API package installed, consumer wired to 1.0 | 2 of 2 | 2 of 2 | **`ServiceConfigurationError: FrenchGreeter not a subtype`** on every lookup |
@@ -206,7 +219,7 @@ How to read the cells: the probe bundle is wired to Greeter 1.0; installed are t
 | Providers also registered as OSGi services | no | no | yes (by design) |
 | Consumer bytecode | changed at load time | untouched | changed at load time, or at build time with the static tool |
 | Launcher / framework | any / any with framework extensions | extended bnd launcher / Felix and Equinox | any / any with weaving hooks |
-| Java class file version of consumers | whatever the running JDK reads | irrelevant | bound to the ASM version |
+| Java class file version of consumers | any with `cpool`, whatever the running JDK reads with `callsite` | irrelevant | bound to the ASM version |
 
 The class space row is the reason this project exists: without the package wiring as filter, a second API version in the framework breaks every consumer of the first one, not just the one that asked. The filter also bites the other way round when it should: in the bnd workspace, whose repository holds `jakarta.ws.rs-api` 3.1 and 4.0, the resolver once wired Jersey 4 to the 3.1 API while the test imported 4.0, and the REST lookup correctly found no provider until the 3.1 API was blacklisted.
 

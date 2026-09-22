@@ -37,6 +37,9 @@ import org.osgi.framework.hooks.weaving.WeavingHook;
  * <li>{@code spi.weaver.serviceLoaderOnly} (default true): mediate only what a
  * {@code java.util.ServiceLoader} reads; false also serves a library that scans
  * {@code META-INF/services} itself</li>
+ * <li>{@code spi.weaver.technique} (default {@code cpool}, alternative
+ * {@code callsite}): how the {@code ServiceLoader.load} calls are redirected,
+ * see {@link ServiceLoaderWeavingHook}</li>
  * <li>{@code spi.weaver.tccl} (default false): additionally install a
  * {@link SpiClassLoader} in TCCL mode as thread context class loader of the
  * thread that activates the extension (the launcher thread; every thread
@@ -56,6 +59,7 @@ public final class SpiWeaver implements BundleActivator {
 	public static final String PROP_TRACE = "spi.weaver.trace";
 	public static final String PROP_PROVIDER_STATES = "spi.weaver.providerStates";
 	public static final String PROP_TCCL = "spi.weaver.tccl";
+	public static final String PROP_TECHNIQUE = "spi.weaver.technique";
 	public static final String PROP_SERVICE_LOADER_ONLY = "spi.weaver.serviceLoaderOnly";
 
 	private SpiRegistry registry;
@@ -79,14 +83,16 @@ public final class SpiWeaver implements BundleActivator {
 		registry = new SpiRegistry(trace);
 		registry.setServiceLoaderOnly(flag(context, PROP_SERVICE_LOADER_ONLY, true));
 		loaders = new SpiLoaders(registry, trace);
-		hook = new ServiceLoaderWeavingHook(trace);
+		ServiceLoaderWeavingHook.Technique technique = ServiceLoaderWeavingHook.Technique
+			.of(context.getProperty(PROP_TECHNIQUE));
+		hook = new ServiceLoaderWeavingHook(trace, technique);
 
 		context.addBundleListener(loaders);
 		registry.open(context, states);
 		ServiceLoaders.install(loaders);
 		hookRegistration = context.registerService(WeavingHook.class, hook, null);
-		trace.trace("weaving hook registered by bundle %s [%d]", context.getBundle().getSymbolicName(),
-			context.getBundle().getBundleId());
+		trace.trace("weaving hook (%s) registered by bundle %s [%d]", technique,
+			context.getBundle().getSymbolicName(), context.getBundle().getBundleId());
 		if (flag(context, PROP_TCCL, false)) {
 			tcclThread = Thread.currentThread();
 			previousTccl = tcclThread.getContextClassLoader();
@@ -114,7 +120,8 @@ public final class SpiWeaver implements BundleActivator {
 			context.removeBundleListener(loaders);
 		}
 		if (hook != null) {
-			trace.trace("stopped: %d classes, %d call sites woven", hook.wovenClasses(), hook.wovenCallSites());
+			trace.trace("stopped: %d classes, %d call sites or method references woven", hook.wovenClasses(),
+				hook.wovenCallSites());
 		}
 	}
 

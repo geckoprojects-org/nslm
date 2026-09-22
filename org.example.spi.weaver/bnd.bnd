@@ -1,12 +1,13 @@
 # ServiceLoader mediator WITHOUT OSGi Service Loader Mediator metadata for any launcher: a framework
-# extension bundle whose ExtensionBundle-Activator registers a WeavingHook. The hook rewrites every
-# ServiceLoader.load(Class) / load(Class, ClassLoader) call site in bundle classes to
-# org.example.spi.weaver.ServiceLoaders.load(..., CallingClass.class), which returns a real
-# java.util.ServiceLoader backed by SpiRegistry/SpiClassLoader of org.example.spi.core (private copy,
-# shared with org.example.spi.mediator). See README.md at the repository root.
+# extension bundle whose ExtensionBundle-Activator registers a WeavingHook. The hook redirects every
+# ServiceLoader.load(Class) / load(Class, ClassLoader) in bundle classes to
+# org.example.spi.weaver.ServiceLoaders (by default in the constant pool only, alternatively by
+# rewriting the call sites), which returns a real java.util.ServiceLoader backed by
+# SpiRegistry/SpiClassLoader of org.example.spi.core (private copy, shared with
+# org.example.spi.mediator). See README.md at the repository root.
 Bundle-Description: java.util.ServiceLoader across bundles without metadata: WeavingHook \
-	(java.lang.classfile) that redirects ServiceLoader.load call sites to ServiceLoaders.load, \
-	backed by the META-INF/services registry of org.example.spi.core.
+	that redirects ServiceLoader.load to ServiceLoaders.load (constant pool patch, or call site \
+	rewrite with java.lang.classfile), backed by the META-INF/services registry of org.example.spi.core.
 
 # Framework extension: lives in the framework class loader, is resolved at install time and its
 # activator runs before any regular bundle starts, so no start level ordering is needed. Its

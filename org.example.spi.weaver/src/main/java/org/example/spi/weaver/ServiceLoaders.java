@@ -14,28 +14,44 @@
 package org.example.spi.weaver;
 
 import java.util.ServiceLoader;
+import java.util.Set;
 
 /**
- * Target of the woven call sites. {@link ServiceLoaderWeavingHook} rewrites
+ * Target of the woven call sites, for both techniques of
+ * {@link ServiceLoaderWeavingHook}.
+ * <p>
+ * {@code cpool} (default): the method references {@code ServiceLoader.load(Class)}
+ * and {@code load(Class, ClassLoader)} in the constant pool are redirected to
+ * {@link #load(Class)} and {@link #load(Class, ClassLoader)} here, same names,
+ * same descriptors. Nothing else in the class changes, and a method reference
+ * {@code ServiceLoader::load} is redirected with them because its method handle
+ * constant points to the same entry. The calling class is the frame directly
+ * below: the woven class itself, or for a method reference the lambda class the
+ * {@code LambdaMetafactory} spun in the woven class's class loader.
+ * <p>
+ * {@code callsite}: the instructions are rewritten
  * <pre>
  * ServiceLoader.load(type)          to  ServiceLoaders.load(type, CallingClass.class)
  * ServiceLoader.load(type, loader)  to  ServiceLoaders.load(type, loader, CallingClass.class)
  * </pre>
- * A method reference {@code ServiceLoader::load} has no call instruction; its
- * {@code invokedynamic} bootstrap argument is redirected to {@link #loadFrom}
- * instead and the calling class becomes a captured argument of the lambda.
- * The calling class is pushed as a class constant by the weaver, so the
- * consumer bundle is known without a stack walk. The result is a real
- * {@link java.util.ServiceLoader} whose class loader is a
- * {@code SpiClassLoader} bound to the consumer bundle: it hands out the
- * {@code META-INF/services} entries of the provider bundles of the consumer's
- * class space and loads the provider classes from their bundles; everything
- * else goes to the class loader the original call would have used.
+ * and a method reference {@code ServiceLoader::load}, which has no call
+ * instruction, gets its {@code invokedynamic} bootstrap argument redirected to
+ * {@link #loadFrom}, with the calling class as a captured argument of the
+ * lambda. The calling class is pushed as a class constant, no stack walk.
+ * <p>
+ * Either way the result is a real {@link java.util.ServiceLoader} whose class
+ * loader is a {@code SpiClassLoader} bound to the consumer bundle: it hands out
+ * the {@code META-INF/services} entries of the provider bundles of the
+ * consumer's class space and loads the provider classes from their bundles;
+ * everything else goes to the class loader the original call would have used.
  * <p>
  * While the weaver is not active (or the caller is not a bundle class) the
  * calls behave exactly like {@code java.util.ServiceLoader}.
  */
 public final class ServiceLoaders {
+
+	private static final StackWalker WALKER = StackWalker
+		.getInstance(Set.of(StackWalker.Option.RETAIN_CLASS_REFERENCE, StackWalker.Option.SHOW_HIDDEN_FRAMES));
 
 	private static volatile SpiLoaders loaders;
 
@@ -46,7 +62,31 @@ public final class ServiceLoaders {
 		loaders = active;
 	}
 
-	/** woven replacement for {@link ServiceLoader#load(Class)} */
+	/** constant pool redirect of {@link ServiceLoader#load(Class)} */
+	public static <S> ServiceLoader<S> load(Class<S> service) {
+		return load(service, caller());
+	}
+
+	/** constant pool redirect of {@link ServiceLoader#load(Class, ClassLoader)} */
+	public static <S> ServiceLoader<S> load(Class<S> service, ClassLoader loader) {
+		return load(service, loader, caller());
+	}
+
+	/**
+	 * The class that called {@link #load(Class)} or {@link #load(Class, ClassLoader)}:
+	 * the first frame outside this class, hidden frames included, because the
+	 * lambda class of a method reference is hidden but lives in the class loader
+	 * of the class that holds the reference. The LambdaForms of a plain
+	 * {@code MethodHandle} invocation ({@code java.lang.invoke}) are skipped.
+	 */
+	private static Class<?> caller() {
+		return WALKER.walk(frames -> frames.map(StackWalker.StackFrame::getDeclaringClass)
+			.filter(c -> c != ServiceLoaders.class && !c.getName().startsWith("java.lang.invoke."))
+			.findFirst()
+			.orElse(ServiceLoaders.class));
+	}
+
+	/** call site replacement for {@link ServiceLoader#load(Class)}; also used by the constant pool redirect */
 	public static <S> ServiceLoader<S> load(Class<S> service, Class<?> caller) {
 		SpiLoaders active = loaders;
 		if (active != null) {
@@ -71,7 +111,7 @@ public final class ServiceLoaders {
 		return load(service, loader, caller);
 	}
 
-	/** woven replacement for {@link ServiceLoader#load(Class, ClassLoader)} */
+	/** call site replacement for {@link ServiceLoader#load(Class, ClassLoader)}; also used by the constant pool redirect */
 	public static <S> ServiceLoader<S> load(Class<S> service, ClassLoader loader, Class<?> caller) {
 		SpiLoaders active = loaders;
 		if (active != null && loader != null) {

@@ -37,6 +37,8 @@ import java.lang.invoke.MethodHandleInfo;
 import java.util.ArrayList;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.example.spi.core.Tracing;
@@ -46,8 +48,20 @@ import org.osgi.framework.hooks.weaving.WovenClass;
 import org.osgi.framework.wiring.BundleWiring;
 
 /**
- * Rewrites the two static {@code java.util.ServiceLoader.load} call sites with
- * the Class-File API ({@code java.lang.classfile}, Java 24+):
+ * Redirects the two static {@code java.util.ServiceLoader.load} methods to
+ * {@link ServiceLoaders}, with one of two techniques.
+ * <p>
+ * <b>{@code cpool}</b> (default, {@link ConstantPoolPatcher}): the MethodRef
+ * entries {@code java/util/ServiceLoader.load:(Class)ServiceLoader} and
+ * {@code load:(Class, ClassLoader)ServiceLoader} get a new owner class entry
+ * {@code org/example/spi/weaver/ServiceLoaders}, appended to the constant pool.
+ * Instructions, stack maps and descriptors stay as they are, the return type
+ * is still {@code java.util.ServiceLoader}, and a method reference
+ * {@code ServiceLoader::load} is covered because its method handle constant
+ * points to the same entry. {@link ServiceLoaders} finds the calling class on
+ * the stack (the frame directly below it).
+ * <p>
+ * <b>{@code callsite}</b> (Class-File API, {@code java.lang.classfile}, Java 24+):
  * <pre>
  * invokestatic java/util/ServiceLoader.load:(Class)ServiceLoader
  *   ->  ldc ThisClass
@@ -68,6 +82,8 @@ import org.osgi.framework.wiring.BundleWiring;
  *   ->  ldc ThisClass
  *       invokedynamic apply(Class)Function  [.., MH ServiceLoaders.loadFrom(Class, Class), ..]
  * </pre>
+ * Stack maps of changed methods are regenerated.
+ * <p>
  * Nothing else is touched: no other descriptor, no {@code loadInstalled} or
  * {@code load(ModuleLayer, Class)}. Two cheap pre filters (the UTF8 string
  * {@code java/util/ServiceLoader} in the raw bytes, then a MethodRef in the
@@ -98,13 +114,28 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 		DirectMethodHandleDesc.Kind.STATIC, CD_ServiceLoaders, "loadFrom",
 		MethodTypeDesc.of(CD_ServiceLoader, CD_Class, CD_Class, CD_ClassLoader));
 	private static final String LAMBDA_METAFACTORY = "Ljava/lang/invoke/LambdaMetafactory;";
+	private static final String SERVICE_LOADERS = ServiceLoaders.class.getName().replace('.', '/');
+	private static final Set<String> LOAD_DESCRIPTORS = Set.of(LOAD_TYPE.descriptorString(),
+		LOAD_TYPE_LOADER.descriptorString());
+
+	/** how the calls are redirected, see the class comment */
+	enum Technique {
+		CPOOL, CALLSITE;
+
+		/** @return the technique named by {@code value}, {@link #CPOOL} if {@code null} */
+		static Technique of(String value) {
+			return value == null || value.isBlank() ? CPOOL : valueOf(value.trim().toUpperCase(Locale.ROOT));
+		}
+	}
 
 	private final Tracing trace;
+	private final Technique technique;
 	private final AtomicInteger wovenClasses = new AtomicInteger();
 	private final AtomicInteger wovenCallSites = new AtomicInteger();
 
-	ServiceLoaderWeavingHook(Tracing trace) {
+	ServiceLoaderWeavingHook(Tracing trace, Technique technique) {
 		this.trace = trace;
+		this.technique = technique;
 	}
 
 	/** number of classes changed so far */
@@ -112,7 +143,7 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 		return wovenClasses.get();
 	}
 
-	/** number of call sites changed so far */
+	/** number of call sites (callsite) or method references (cpool) changed so far */
 	public int wovenCallSites() {
 		return wovenCallSites.get();
 	}
@@ -124,7 +155,7 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 			return;
 		}
 		try {
-			byte[] woven = weave(bytes, wovenClass.getBundleWiring());
+			byte[] woven = weave(wovenClass.getClassName(), bytes, wovenClass.getBundleWiring());
 			if (woven != null) {
 				wovenClass.setBytes(woven);
 				List<String> imports = wovenClass.getDynamicImports();
@@ -140,11 +171,23 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 	}
 
 	/**
+	 * @param className binary name of the class, for tracing
 	 * @param wiring the wiring of the bundle the class belongs to; used to read
 	 *            class files for stack map generation, or {@code null}
 	 * @return the woven class file, or {@code null} if nothing was changed
 	 */
-	byte[] weave(byte[] bytes, BundleWiring wiring) {
+	byte[] weave(String className, byte[] bytes, BundleWiring wiring) {
+		if (technique == Technique.CPOOL) {
+			ConstantPoolPatcher.Result result = ConstantPoolPatcher.redirect(bytes, SERVICE_LOADER, "load",
+				LOAD_DESCRIPTORS, SERVICE_LOADERS);
+			if (result == null) {
+				return null;
+			}
+			wovenCallSites.addAndGet(result.redirected());
+			trace.trace("woven %s: %d ServiceLoader.load method reference(s) in the constant pool%s",
+				className, result.redirected(), wiring == null ? "" : " of bundle " + wiring.getBundle().getSymbolicName());
+			return result.bytes();
+		}
 		ClassFile classFile = ClassFile.of(ClassFile.ClassHierarchyResolverOption.of(hierarchyResolver(wiring)));
 		ClassModel model = classFile.parse(bytes);
 		if (!callsServiceLoaderLoad(model)) {
