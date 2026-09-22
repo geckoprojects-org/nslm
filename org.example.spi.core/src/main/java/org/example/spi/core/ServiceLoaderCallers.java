@@ -19,7 +19,6 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
-import java.util.Set;
 
 /**
  * Answers whether the current call is part of a {@link ServiceLoader} lookup.
@@ -40,9 +39,8 @@ import java.util.Set;
  */
 final class ServiceLoaderCallers {
 
-	/** class references only, no method info: about half the cost of a full walk */
-	private static final StackWalker WALKER = StackWalker
-		.getInstance(Set.of(StackWalker.Option.RETAIN_CLASS_REFERENCE, StackWalker.Option.DROP_METHOD_INFO));
+	/** class references only, no method info, see {@link ClassWalker} */
+	private static final StackWalker WALKER = ClassWalker.WALKER;
 
 	/** the java.util.ServiceLoader class that calls getResources, or {@code null} if unknown */
 	private static final Class<?> RESOURCES_CALLER = calibrate();

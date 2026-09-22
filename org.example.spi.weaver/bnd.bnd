@@ -41,6 +41,11 @@ Import-Package: \
 	org.osgi.util.tracker,\
 	!*
 
+# Built for Java 21. bnd derives osgi.ee from the highest class file version, which would be the
+# Java 25 class CallSiteWeaver of the optional call site technique, loaded by name on request only.
+-noee: true
+Require-Capability: osgi.ee;filter:="(&(osgi.ee=JavaSE)(version>=21))"
+
 -jpms-module-info: ,
 -sources: false
 -noextraheaders: true

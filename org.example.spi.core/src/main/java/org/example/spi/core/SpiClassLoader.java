@@ -195,10 +195,9 @@ public final class SpiClassLoader extends ClassLoader {
 
 	/**
 	 * Class references only, no method info: this is what SecurityManager.getClassContext
-	 * does internally as well and about half the cost of a full walk (~1 µs on Java 25).
+	 * does internally as well, see {@link ClassWalker}.
 	 */
-	private static final StackWalker WALKER = StackWalker
-		.getInstance(Set.of(StackWalker.Option.RETAIN_CLASS_REFERENCE, StackWalker.Option.DROP_METHOD_INFO));
+	private static final StackWalker WALKER = ClassWalker.WALKER;
 
 	/** the first bundle class loader on the stack, i.e. the bundle calling ServiceLoader */
 	private Bundle callerBundle() {

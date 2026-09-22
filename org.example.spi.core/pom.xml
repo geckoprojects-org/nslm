@@ -13,6 +13,11 @@
   <description>SpiRegistry and SpiClassLoader shared by the weaving and the launcher based mediator.
     Plain jar, embedded by both as a private package; never deployed on its own.</description>
 
+  <properties>
+    <!-- embedded by the weaver, which is built for Java 21 -->
+    <maven.compiler.release>21</maven.compiler.release>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.osgi</groupId>

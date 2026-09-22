@@ -91,7 +91,7 @@ public final class SpiWeaver implements BundleActivator {
 		registry.open(context, states);
 		ServiceLoaders.install(loaders);
 		hookRegistration = context.registerService(WeavingHook.class, hook, null);
-		trace.trace("weaving hook (%s) registered by bundle %s [%d]", technique,
+		trace.trace("weaving hook (%s) registered by bundle %s [%d]", hook.technique(),
 			context.getBundle().getSymbolicName(), context.getBundle().getBundleId());
 		if (flag(context, PROP_TCCL, false)) {
 			tcclThread = Thread.currentThread();
