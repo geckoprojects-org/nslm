@@ -1,5 +1,6 @@
 # The Java 21 variant of org.example.spi.weaver: same classes except CallSiteWeaver (the hook falls
-# back to the constant pool technique), same manifest instructions. The Bundle-SymbolicName comes
+# back to the constant pool technique) and CallerFinder (own Java 21 version), same manifest
+# instructions. The Bundle-SymbolicName comes
 # from the artifactId, so both variants can sit in one repository. The ~ keeps the headers set here.
 -include: ~${.}/../org.example.spi.weaver/bnd.bnd
 

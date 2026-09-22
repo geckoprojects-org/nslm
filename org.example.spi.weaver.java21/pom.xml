@@ -12,7 +12,7 @@
   <name>ServiceLoader weaving mediator for Java 21 (framework extension)</name>
   <description>The sources and bnd instructions of org.example.spi.weaver, built for Java 21 without the
     call site technique (CallSiteWeaver needs the Class-File API of Java 24+); always uses the constant
-    pool technique. No sources of its own.</description>
+    pool technique. Own source: the Java 21 version of CallerFinder.</description>
 
   <properties>
     <maven.compiler.release>21</maven.compiler.release>
@@ -52,6 +52,8 @@
                   <directory>${project.basedir}/../org.example.spi.weaver/src/main/java</directory>
                   <excludes>
                     <exclude>**/CallSiteWeaver.java</exclude>
+                    <!-- replaced by the Java 21 version in src/main/java -->
+                    <exclude>**/CallerFinder.java</exclude>
                   </excludes>
                 </resource>
               </resources>
@@ -65,6 +67,7 @@
         <configuration>
           <compileSourceRoots>
             <compileSourceRoot>${project.build.directory}/generated-sources/weaver</compileSourceRoot>
+            <compileSourceRoot>${project.basedir}/src/main/java</compileSourceRoot>
           </compileSourceRoots>
         </configuration>
       </plugin>

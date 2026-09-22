@@ -14,7 +14,6 @@
 package org.example.spi.weaver;
 
 import java.util.ServiceLoader;
-import java.util.Set;
 
 /**
  * Target of the woven call sites, for both techniques of
@@ -50,9 +49,6 @@ import java.util.Set;
  */
 public final class ServiceLoaders {
 
-	private static final StackWalker WALKER = StackWalker
-		.getInstance(Set.of(StackWalker.Option.RETAIN_CLASS_REFERENCE, StackWalker.Option.SHOW_HIDDEN_FRAMES));
-
 	private static volatile SpiLoaders loaders;
 
 	private ServiceLoaders() {
@@ -77,20 +73,9 @@ public final class ServiceLoaders {
 		return load(service, loader, caller());
 	}
 
-	/**
-	 * The class that called a redirect target of this package ({@link #load(Class)},
-	 * {@link #load(Class, ClassLoader)}, {@link JdkFactories}): the first frame
-	 * outside this package, hidden frames included, because the lambda class of a
-	 * method reference is hidden but lives in the class loader of the class that
-	 * holds the reference. The LambdaForms of a plain {@code MethodHandle}
-	 * invocation ({@code java.lang.invoke}) are skipped.
-	 */
+	/** the class that called a redirect target of this package, see {@link CallerFinder} */
 	static Class<?> caller() {
-		String own = ServiceLoaders.class.getPackageName();
-		return WALKER.walk(frames -> frames.map(StackWalker.StackFrame::getDeclaringClass)
-			.filter(c -> !c.getPackageName().equals(own) && !c.getName().startsWith("java.lang.invoke."))
-			.findFirst()
-			.orElse(ServiceLoaders.class));
+		return CallerFinder.caller();
 	}
 
 	/** call site replacement for {@link ServiceLoader#load(Class)}; also used by the constant pool redirect */
