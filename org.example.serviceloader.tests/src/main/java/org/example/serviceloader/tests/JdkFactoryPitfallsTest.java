@@ -47,7 +47,8 @@ import org.osgi.test.junit5.context.BundleContextExtension;
  * as TCCL) and on a thread without TCCL. The weaver redirects the factory calls
  * of bundle classes to {@code org.example.spi.weaver.JdkFactories}, which sets
  * the calling bundle's loader as TCCL for the duration of the call; the other
- * deployments depend on the TCCL the thread happens to have.
+ * deployments depend on the TCCL the thread happens to have, and their known
+ * result off the test thread is the JDK default ({@link Expectation}).
  */
 @ExtendWith(BundleContextExtension.class)
 public class JdkFactoryPitfallsTest {
@@ -78,7 +79,7 @@ public class JdkFactoryPitfallsTest {
 		"stax", "dom", "sax"
 	})
 	void onTheTestThread(String factory) {
-		assertThat(report(factory, "test thread", create(factory))).isEqualTo(expected(factory));
+		Expectation.correct(expected(factory)).verify(Deployment.of(context), report(factory, "test thread", create(factory)));
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -87,7 +88,7 @@ public class JdkFactoryPitfallsTest {
 	})
 	void inCommonPool(String factory) {
 		String result = CompletableFuture.supplyAsync(() -> create(factory)).join();
-		assertThat(report(factory, "common pool", result)).isEqualTo(expected(factory));
+		offTheTestThread(factory).verify(Deployment.of(context), report(factory, "common pool", result));
 	}
 
 	@ParameterizedTest(name = "{0}")
@@ -100,7 +101,27 @@ public class JdkFactoryPitfallsTest {
 		thread.setContextClassLoader(null);
 		thread.start();
 		thread.join(10_000);
-		assertThat(report(factory, "thread without TCCL", result.get())).isEqualTo(expected(factory));
+		offTheTestThread(factory).verify(Deployment.of(context), report(factory, "thread without TCCL", result.get()));
+	}
+
+	/**
+	 * Off the test thread the TCCL is the system class loader, which sees no
+	 * bundle: only the weaver, which sets the caller's loader for the factory
+	 * call, finds the bundle provider; the others get the JDK's built-in one.
+	 */
+	private static Expectation<String> offTheTestThread(String factory) {
+		return Expectation.correct(expected(factory))
+			.known(Deployment.TCCL, jdkDefault(factory),
+				"the JDK asks the TCCL, here the system class loader, which sees no bundle provider");
+	}
+
+	private static String jdkDefault(String factory) {
+		return switch (factory) {
+			case "stax" -> "com.sun.xml.internal.stream.XMLInputFactoryImpl";
+			case "dom" -> "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl";
+			case "sax" -> "com.sun.org.apache.xerces.internal.jaxp.SAXParserFactoryImpl";
+			default -> throw new IllegalArgumentException(factory);
+		};
 	}
 
 	private static String expected(String factory) {

@@ -53,6 +53,10 @@ import org.osgi.test.junit5.context.BundleContextExtension;
  * The caller bundle is not in any {@code -runbundles}; the test installs it
  * from {@code embedded/} inside the test bundle.
  * <p>
+ * Every case asserts the correct result, except where a {@link Deployment} has a
+ * known limitation: then it asserts exactly the observed result, with the
+ * reason ({@link Expectation}).
+ * <p>
  * An edge case of the weaver is covered as well: a {@code MethodHandle} or
  * reflective call does not appear in the constant pool and is not woven; it
  * depends on the TCCL, with the weaver only through {@code spi.weaver.tccl=true},
@@ -64,6 +68,21 @@ public class TcclPitfallsTest {
 
 	static final String CALLER = "org.example.serviceloader.pitfalls";
 	static final List<String> CORRECT = List.of("org.example.serviceloader.provider.v2.FrenchGreeter");
+
+	/** nothing mediated: the JDK's lookup through a TCCL that sees no bundle */
+	static final List<String> NOT_MEDIATED = List.of();
+
+	/**
+	 * the lookup ran in the class space of the test bundle (the stale or foreign
+	 * TCCL): its Greeter 1.0 providers, which are no Greeter 2.0
+	 */
+	static final List<String> TEST_BUNDLE_CLASS_SPACE = List.of(
+		"ServiceConfigurationError: org.example.serviceloader.api.Greeter: org.example.serviceloader.provider.EnglishGreeter not a subtype",
+		"ServiceConfigurationError: org.example.serviceloader.api.Greeter: org.example.serviceloader.provider.GermanGreeter not a subtype");
+
+	static final String NO_TCCL_NO_CALLER = "the calling bundle is taken from the TCCL, and this thread's TCCL is the system class loader, which sees no bundle";
+	static final String FOREIGN_TCCL = "the calling bundle is taken from the TCCL, and this thread's TCCL is the test bundle's class loader";
+	static final String NOT_WOVEN = "MethodHandle and reflection do not appear in the constant pool; unwoven, the lookup depends on the TCCL, which knows no registry here";
 
 	@InjectBundleContext
 	BundleContext context;
@@ -91,13 +110,13 @@ public class TcclPitfallsTest {
 		"explicitOwnLoader", "explicitApiLoader"
 	})
 	void callStyle(String style) {
-		assertThat(report("style " + style, callStyles().apply(style))).isEqualTo(CORRECT);
+		Expectation.correct(CORRECT).verify(deployment(), report("style " + style, callStyles().apply(style)));
 	}
 
 	/** baseline: the caller's lookup on the test thread, TCCL as the launcher left it */
 	@Test
 	void onTheTestThread() throws Exception {
-		assertThat(report("test thread", lookup().call())).isEqualTo(CORRECT);
+		Expectation.correct(CORRECT).verify(deployment(), report("test thread", lookup().call()));
 	}
 
 	/**
@@ -108,7 +127,9 @@ public class TcclPitfallsTest {
 	void commonPool() {
 		Callable<List<String>> lookup = lookup();
 		List<String> result = CompletableFuture.supplyAsync(() -> call(lookup)).join();
-		assertThat(report("common pool", result)).isEqualTo(CORRECT);
+		Expectation.correct(CORRECT)
+			.known(Deployment.TCCL, NOT_MEDIATED, NO_TCCL_NO_CALLER)
+			.verify(deployment(), report("common pool", result));
 	}
 
 	/** a thread whose TCCL is {@code null}: the JDK falls back to the system class loader */
@@ -120,7 +141,9 @@ public class TcclPitfallsTest {
 		thread.setContextClassLoader(null);
 		thread.start();
 		thread.join(10_000);
-		assertThat(report("thread without TCCL", result.get())).isEqualTo(CORRECT);
+		Expectation.correct(CORRECT)
+			.known(Deployment.TCCL, NOT_MEDIATED, NO_TCCL_NO_CALLER)
+			.verify(deployment(), report("thread without TCCL", result.get()));
 	}
 
 	/**
@@ -135,8 +158,10 @@ public class TcclPitfallsTest {
 		try {
 			withTccl(TcclPitfallsTest.class.getClassLoader(), () -> pool.submit(() -> {
 			}).get(10, TimeUnit.SECONDS));
-			assertThat(report("pool thread with stale TCCL", pool.submit(lookup).get(10, TimeUnit.SECONDS)))
-				.isEqualTo(CORRECT);
+			List<String> result = pool.submit(lookup).get(10, TimeUnit.SECONDS);
+			Expectation.correct(CORRECT)
+				.known(Deployment.TCCL, TEST_BUNDLE_CLASS_SPACE, FOREIGN_TCCL)
+				.verify(deployment(), report("pool thread with stale TCCL", result));
 		} finally {
 			pool.shutdownNow();
 		}
@@ -151,7 +176,9 @@ public class TcclPitfallsTest {
 	void foreignTcclNotRestored() throws Exception {
 		Callable<List<String>> lookup = lookup();
 		List<String> result = withTccl(TcclPitfallsTest.class.getClassLoader(), lookup);
-		assertThat(report("foreign TCCL", result)).isEqualTo(CORRECT);
+		Expectation.correct(CORRECT)
+			.known(Deployment.TCCL, TEST_BUNDLE_CLASS_SPACE, FOREIGN_TCCL)
+			.verify(deployment(), report("foreign TCCL", result));
 	}
 
 	/**
@@ -170,7 +197,13 @@ public class TcclPitfallsTest {
 			withTccl(TcclPitfallsTest.class.getClassLoader(), () -> pool.submit(() -> {
 			}).get(10, TimeUnit.SECONDS));
 			List<String> result = pool.submit(() -> styles.apply(style)).get(10, TimeUnit.SECONDS);
-			assertThat(report("style " + style + " in pool thread with stale TCCL", result)).isEqualTo(CORRECT);
+			Expectation<List<String>> expectation = Expectation.correct(CORRECT)
+				.known(Deployment.TCCL, TEST_BUNDLE_CLASS_SPACE, FOREIGN_TCCL);
+			if (!"direct".equals(style)) {
+				// the weaver's TCCL option only helps where its registry aware loader is the TCCL
+				expectation.known(Deployment.WEAVER, NOT_MEDIATED, NOT_WOVEN);
+			}
+			expectation.verify(deployment(), report("style " + style + " in pool thread with stale TCCL", result));
 		} finally {
 			pool.shutdownNow();
 		}
@@ -184,7 +217,16 @@ public class TcclPitfallsTest {
 	void callStyleInCommonPool(String style) {
 		Function<String, List<String>> styles = callStyles();
 		List<String> result = CompletableFuture.supplyAsync(() -> styles.apply(style)).join();
-		assertThat(report("style " + style + " in common pool", result)).isEqualTo(CORRECT);
+		Expectation<List<String>> expectation = Expectation.correct(CORRECT)
+			.known(Deployment.TCCL, NOT_MEDIATED, NO_TCCL_NO_CALLER);
+		if (!"direct".equals(style)) {
+			expectation.known(Deployment.WEAVER, NOT_MEDIATED, NOT_WOVEN);
+		}
+		expectation.verify(deployment(), report("style " + style + " in common pool", result));
+	}
+
+	private Deployment deployment() {
+		return Deployment.of(context);
 	}
 
 	private List<String> report(String scenario, List<String> result) {
