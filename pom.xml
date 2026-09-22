@@ -183,6 +183,16 @@
         <artifactId>org.example.serviceloader.clash.caller.v2</artifactId>
         <version>${revision}</version>
       </dependency>
+      <dependency>
+        <groupId>org.example.spi</groupId>
+        <artifactId>org.example.serviceloader.pitfalls</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.example.spi</groupId>
+        <artifactId>org.example.serviceloader.jaxp.provider</artifactId>
+        <version>${revision}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 

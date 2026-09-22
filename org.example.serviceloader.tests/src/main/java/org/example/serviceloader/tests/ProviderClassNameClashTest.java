@@ -59,7 +59,7 @@ import org.osgi.test.junit5.context.BundleContextExtension;
  * every bundle has its own loader, and a new one after reinstall.
  * <p>
  * The four bundles are not in any {@code -runbundles}; the test installs them
- * from {@code clash/} inside the test bundle and uninstalls them afterwards.
+ * from {@code embedded/} inside the test bundle and uninstalls them afterwards.
  */
 @ExtendWith(BundleContextExtension.class)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -183,8 +183,8 @@ public class ProviderClassNameClashTest {
 
 	private void installAll() throws IOException, BundleException {
 		for (String bsn : BUNDLES) {
-			try (InputStream in = ProviderClassNameClashTest.class.getResourceAsStream("/clash/" + bsn + ".jar")) {
-				assertThat(in).as("clash/%s.jar in the test bundle", bsn).isNotNull();
+			try (InputStream in = ProviderClassNameClashTest.class.getResourceAsStream("/embedded/" + bsn + ".jar")) {
+				assertThat(in).as("embedded/%s.jar in the test bundle", bsn).isNotNull();
 				installed.add(context.installBundle("clash:" + bsn, in));
 			}
 		}
@@ -207,7 +207,7 @@ public class ProviderClassNameClashTest {
 		old.uninstall();
 		refresh(List.of(old));
 		installed.remove(old);
-		try (InputStream in = ProviderClassNameClashTest.class.getResourceAsStream("/clash/" + bsn + ".jar")) {
+		try (InputStream in = ProviderClassNameClashTest.class.getResourceAsStream("/embedded/" + bsn + ".jar")) {
 			Bundle bundle = context.installBundle("clash:" + bsn, in);
 			installed.add(bundle);
 			bundle.start();

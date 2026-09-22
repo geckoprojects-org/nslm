@@ -62,6 +62,11 @@ public final class ServiceLoaders {
 		loaders = active;
 	}
 
+	/** the active loaders, {@code null} while the weaver is not active */
+	static SpiLoaders active() {
+		return loaders;
+	}
+
 	/** constant pool redirect of {@link ServiceLoader#load(Class)} */
 	public static <S> ServiceLoader<S> load(Class<S> service) {
 		return load(service, caller());
@@ -73,15 +78,17 @@ public final class ServiceLoaders {
 	}
 
 	/**
-	 * The class that called {@link #load(Class)} or {@link #load(Class, ClassLoader)}:
-	 * the first frame outside this class, hidden frames included, because the
-	 * lambda class of a method reference is hidden but lives in the class loader
-	 * of the class that holds the reference. The LambdaForms of a plain
-	 * {@code MethodHandle} invocation ({@code java.lang.invoke}) are skipped.
+	 * The class that called a redirect target of this package ({@link #load(Class)},
+	 * {@link #load(Class, ClassLoader)}, {@link JdkFactories}): the first frame
+	 * outside this package, hidden frames included, because the lambda class of a
+	 * method reference is hidden but lives in the class loader of the class that
+	 * holds the reference. The LambdaForms of a plain {@code MethodHandle}
+	 * invocation ({@code java.lang.invoke}) are skipped.
 	 */
-	private static Class<?> caller() {
+	static Class<?> caller() {
+		String own = ServiceLoaders.class.getPackageName();
 		return WALKER.walk(frames -> frames.map(StackWalker.StackFrame::getDeclaringClass)
-			.filter(c -> c != ServiceLoaders.class && !c.getName().startsWith("java.lang.invoke."))
+			.filter(c -> !c.getPackageName().equals(own) && !c.getName().startsWith("java.lang.invoke."))
 			.findFirst()
 			.orElse(ServiceLoaders.class));
 	}

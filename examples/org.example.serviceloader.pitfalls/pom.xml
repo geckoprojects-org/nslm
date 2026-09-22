@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.example.spi</groupId>
+    <artifactId>examples</artifactId>
+    <version>${revision}</version>
+  </parent>
+  <artifactId>org.example.serviceloader.pitfalls</artifactId>
+  <name>TCCL pitfalls caller for Greeter 2.0</name>
+  <description>Consumer wired to Greeter 2.0 that calls ServiceLoader.load in the ways that are known to confuse caller detection (lambda, method reference, method handle, reflection, explicit loaders) and offers its plain lookup as a Callable, so that the test can run it on threads with foreign or missing TCCLs. Installed by TcclPitfallsTest.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.osgi</groupId>
+      <artifactId>org.osgi.service.component.annotations</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.api.v2</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+</project>

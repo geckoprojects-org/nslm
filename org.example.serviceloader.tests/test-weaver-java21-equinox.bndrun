@@ -26,6 +26,7 @@
 # redirects every ServiceLoader.load call site to ServiceLoaders.load.
 # spi.weaver.tccl: also serve the ServiceLoader calls inside the JDK (StAX test) through the TCCL
 -runproperties: \
+	test.deployment=weaver-java21-equinox,\
 	spi.weaver.trace=true,\
 	spi.weaver.technique=callsite,\
 	spi.weaver.tccl=true,\

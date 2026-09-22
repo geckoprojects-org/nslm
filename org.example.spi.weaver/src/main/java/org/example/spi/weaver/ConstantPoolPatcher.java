@@ -14,13 +14,14 @@
 package org.example.spi.weaver;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
- * Redirects method references in the constant pool of a class file to another
- * owner class, without touching anything else:
+ * Redirects method references in the constant pool of a class file to other
+ * owner classes, without touching anything else:
  * <pre>
  * MethodRef  -> Class java/util/ServiceLoader, load:(Ljava/lang/Class;)Ljava/util/ServiceLoader;
  *   becomes
@@ -37,6 +38,9 @@ import java.util.Set;
  * Only the constant pool is parsed, which has kept its format since Java 11
  * ({@code Dynamic}); an unknown entry type leaves the class alone, whatever
  * the class file version.
+ * <p>
+ * Several {@link Rule}s are applied in one pass, each redirected owner gets
+ * one new {@code Class} entry.
  */
 final class ConstantPoolPatcher {
 
@@ -53,19 +57,26 @@ final class ConstantPoolPatcher {
 	record Result(byte[] bytes, int redirected) {
 	}
 
+	/**
+	 * @param owner internal name of the class whose method references are redirected
+	 * @param newOwner internal name of the new owner (ASCII); it must declare the
+	 *            methods with the same names and descriptors
+	 * @param methods {@code name + descriptor} of the methods to redirect, e.g.
+	 *            {@code "load(Ljava/lang/Class;)Ljava/util/ServiceLoader;"}
+	 */
+	record Rule(String owner, String newOwner, Set<String> methods) {
+	}
+
 	private ConstantPoolPatcher() {
 	}
 
 	/**
 	 * @param bytes a class file
-	 * @param owner internal name of the class whose method references are redirected
-	 * @param name method name
-	 * @param descriptors method descriptors to redirect
-	 * @param newOwner internal name of the new owner (ASCII)
+	 * @param rules the redirections to apply
 	 * @return the patched class file, or {@code null} if no method reference
 	 *         matched or the class file is not understood
 	 */
-	static Result redirect(byte[] bytes, String owner, String name, Set<String> descriptors, String newOwner) {
+	static Result redirect(byte[] bytes, List<Rule> rules) {
 		if (bytes.length < 10 || u4(bytes, 0) != MAGIC) {
 			return null;
 		}
@@ -93,44 +104,65 @@ final class ConstantPoolPatcher {
 		}
 		int poolEnd = pos;
 
-		List<Integer> matches = new ArrayList<>();
+		// method ref index -> rule, in pool order
+		Map<Integer, Rule> matches = new LinkedHashMap<>();
 		for (int i = 1; i < count; i++) {
 			if (tags[i] != METHOD_REF) {
 				continue;
 			}
 			int classIndex = u2(bytes, offsets[i] + 1);
 			int natIndex = u2(bytes, offsets[i] + 3);
-			if (tags[classIndex] != CLASS || tags[natIndex] != NAME_AND_TYPE
-				|| !utf8Equals(bytes, offsets, tags, u2(bytes, offsets[classIndex] + 1), owner)
-				|| !utf8Equals(bytes, offsets, tags, u2(bytes, offsets[natIndex] + 1), name)) {
+			if (tags[classIndex] != CLASS || tags[natIndex] != NAME_AND_TYPE) {
 				continue;
 			}
-			int descriptorIndex = u2(bytes, offsets[natIndex] + 3);
-			if (tags[descriptorIndex] == UTF8 && descriptors.contains(utf8(bytes, offsets[descriptorIndex]))) {
-				matches.add(i);
+			int ownerIndex = u2(bytes, offsets[classIndex] + 1);
+			for (Rule rule : rules) {
+				if (!utf8Equals(bytes, offsets, tags, ownerIndex, rule.owner())) {
+					continue;
+				}
+				int nameIndex = u2(bytes, offsets[natIndex] + 1);
+				int descriptorIndex = u2(bytes, offsets[natIndex] + 3);
+				if (tags[nameIndex] == UTF8 && tags[descriptorIndex] == UTF8
+					&& rule.methods().contains(utf8(bytes, offsets[nameIndex]) + utf8(bytes, offsets[descriptorIndex]))) {
+					matches.put(i, rule);
+				}
+				break;
 			}
 		}
-		if (matches.isEmpty() || count + 2 > 0xFFFF) {
+		if (matches.isEmpty()) {
 			return null;
 		}
 
-		byte[] ownerName = newOwner.getBytes(StandardCharsets.US_ASCII);
-		int added = 3 + ownerName.length + 3;
+		// one Utf8 + Class pair per new owner, appended in the order of first use
+		Map<String, Integer> newClassIndex = new LinkedHashMap<>();
+		int next = count;
+		int added = 0;
+		for (Rule rule : matches.values()) {
+			if (!newClassIndex.containsKey(rule.newOwner())) {
+				newClassIndex.put(rule.newOwner(), next + 1);
+				next += 2;
+				added += 3 + rule.newOwner().length() + 3;
+			}
+		}
+		if (next > 0xFFFF) {
+			return null;
+		}
 		byte[] out = new byte[bytes.length + added];
 		System.arraycopy(bytes, 0, out, 0, poolEnd);
-		int utf8Index = count;
-		int classIndex = count + 1;
 		int p = poolEnd;
-		out[p++] = UTF8;
-		p = put2(out, p, ownerName.length);
-		System.arraycopy(ownerName, 0, out, p, ownerName.length);
-		p += ownerName.length;
-		out[p++] = CLASS;
-		p = put2(out, p, utf8Index);
+		for (Map.Entry<String, Integer> entry : newClassIndex.entrySet()) {
+			byte[] ownerName = entry.getKey().getBytes(StandardCharsets.US_ASCII);
+			out[p++] = UTF8;
+			p = put2(out, p, ownerName.length);
+			System.arraycopy(ownerName, 0, out, p, ownerName.length);
+			p += ownerName.length;
+			out[p++] = CLASS;
+			p = put2(out, p, entry.getValue() - 1);
+		}
 		System.arraycopy(bytes, poolEnd, out, p, bytes.length - poolEnd);
-		put2(out, 8, count + 2);
-		for (int ref : matches) {
-			put2(out, offsets[ref] + 1, classIndex);
+		put2(out, 8, next);
+		for (Map.Entry<Integer, Rule> match : matches.entrySet()) {
+			put2(out, offsets[match.getKey()] + 1, newClassIndex.get(match.getValue().newOwner()));
 		}
 		return new Result(out, matches.size());
 	}
@@ -152,7 +184,7 @@ final class ConstantPoolPatcher {
 		return true;
 	}
 
-	/** descriptors of interest are ASCII, where modified UTF-8 and ISO 8859-1 agree */
+	/** names and descriptors of interest are ASCII, where modified UTF-8 and ISO 8859-1 agree */
 	private static String utf8(byte[] bytes, int offset) {
 		return new String(bytes, offset + 3, u2(bytes, offset + 1), StandardCharsets.ISO_8859_1);
 	}

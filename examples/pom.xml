@@ -26,6 +26,8 @@
     <module>org.example.serviceloader.clash.provider.v2</module>
     <module>org.example.serviceloader.clash.caller</module>
     <module>org.example.serviceloader.clash.caller.v2</module>
+    <module>org.example.serviceloader.pitfalls</module>
+    <module>org.example.serviceloader.jaxp.provider</module>
   </modules>
 
   <build>

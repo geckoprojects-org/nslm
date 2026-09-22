@@ -9,6 +9,6 @@ Test-Cases: ${classes;HIERARCHY_INDIRECTLY_ANNOTATED;org.junit.platform.commons.
 -privatepackage: \
 	org.example.serviceloader.tests,\
 	org.example.serviceloader.tests.selfcontained
-# Bundles installed by ProviderClassNameClashTest at runtime (copied by maven-dependency-plugin)
--includeresource: clash=target/clash
+# Bundles the tests install at runtime (copied by maven-dependency-plugin)
+-includeresource: embedded=target/embedded
 -noextraheaders: true

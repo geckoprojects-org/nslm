@@ -143,7 +143,6 @@
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter-params</artifactId>
       <version>${junit.version}</version>
-      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.junit.platform</groupId>
@@ -251,8 +250,10 @@
       <scope>runtime</scope>
     </dependency>
 
-    <!-- provider class name clash: not in any -runbundles, embedded under clash/ and installed by
-         ProviderClassNameClashTest (the extra providers would change the counts of the Greeter tests) -->
+    <!-- not in any -runbundles, embedded under embedded/ and installed by the tests that need them:
+         provider class name clash (ProviderClassNameClashTest; the extra providers would change the counts
+         of the Greeter tests), the TCCL pitfalls caller (TcclPitfallsTest) and the JAXP providers
+         (JdkFactoryPitfallsTest; installed for good they would replace the JDK's parsers everywhere) -->
     <dependency>
       <groupId>org.example.spi</groupId>
       <artifactId>org.example.serviceloader.clash.provider</artifactId>
@@ -271,6 +272,16 @@
     <dependency>
       <groupId>org.example.spi</groupId>
       <artifactId>org.example.serviceloader.clash.caller.v2</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.pitfalls</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.jaxp.provider</artifactId>
       <scope>provided</scope>
     </dependency>
 
@@ -435,14 +446,14 @@
         <artifactId>maven-dependency-plugin</artifactId>
         <executions>
           <execution>
-            <id>clash-bundles</id>
+            <id>embedded-bundles</id>
             <phase>generate-resources</phase>
             <goals>
               <goal>copy-dependencies</goal>
             </goals>
             <configuration>
-              <includeArtifactIds>org.example.serviceloader.clash.provider,org.example.serviceloader.clash.provider.v2,org.example.serviceloader.clash.caller,org.example.serviceloader.clash.caller.v2</includeArtifactIds>
-              <outputDirectory>${project.build.directory}/clash</outputDirectory>
+              <includeArtifactIds>org.example.serviceloader.clash.provider,org.example.serviceloader.clash.provider.v2,org.example.serviceloader.clash.caller,org.example.serviceloader.clash.caller.v2,org.example.serviceloader.pitfalls,org.example.serviceloader.jaxp.provider</includeArtifactIds>
+              <outputDirectory>${project.build.directory}/embedded</outputDirectory>
               <stripVersion>true</stripVersion>
               <overWriteSnapshots>true</overWriteSnapshots>
             </configuration>

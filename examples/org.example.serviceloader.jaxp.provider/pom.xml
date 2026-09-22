@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.example.spi</groupId>
+    <artifactId>examples</artifactId>
+    <version>${revision}</version>
+  </parent>
+  <artifactId>org.example.serviceloader.jaxp.provider</artifactId>
+  <name>JAXP providers</name>
+  <description>DocumentBuilderFactory and SAXParserFactory providers as a plain bundle (META-INF/services only) that delegate to the JDK's built-in implementation; found by javax.xml.parsers.FactoryFinder through the TCCL inside the JDK. Installed by JdkFactoryPitfallsTest.</description>
+</project>

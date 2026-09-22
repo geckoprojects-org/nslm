@@ -14,6 +14,7 @@
 package org.example.spi.weaver;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -45,10 +46,18 @@ import org.osgi.framework.wiring.BundleWiring;
  * {@code org.example.spi.weaver.java21} does not contain it, and the hook falls
  * back to {@code cpool}.
  * <p>
+ * <b>JDK factories</b> (both techniques, constant pool): the StAX and JAXP
+ * factory methods that look up their implementation through the TCCL inside
+ * the JDK ({@code XMLInputFactory.newInstance()},
+ * {@code DocumentBuilderFactory.newInstance()}, ...) are redirected to
+ * {@link JdkFactories}, which runs them with the calling bundle's
+ * {@code SpiClassLoader} as TCCL.
+ * <p>
  * Nothing else is touched: no other descriptor, no {@code loadInstalled} or
  * {@code load(ModuleLayer, Class)}. Two cheap pre filters (the UTF8 string
- * {@code java/util/ServiceLoader} in the raw bytes, then a MethodRef in the
- * constant pool) keep the cost for the vast majority of classes near zero.
+ * {@code java/util/ServiceLoader} or {@code javax/xml/} in the raw bytes, then
+ * a matching MethodRef in the constant pool) keep the cost for the vast
+ * majority of classes near zero.
  * Woven classes get a {@code DynamicImport-Package} on the exported
  * {@link ServiceLoaders} package.
  * <p>
@@ -60,10 +69,13 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 	static final String SERVICE_LOADER = "java/util/ServiceLoader";
 	static final String DYNAMIC_IMPORT = ServiceLoaders.class.getPackageName() + ";version=\"[1.0,2)\"";
 
-	private static final byte[] MARKER = SERVICE_LOADER.getBytes(StandardCharsets.ISO_8859_1);
-	private static final String SERVICE_LOADERS = ServiceLoaders.class.getName().replace('.', '/');
-	private static final Set<String> LOAD_DESCRIPTORS = Set.of("(Ljava/lang/Class;)Ljava/util/ServiceLoader;",
-		"(Ljava/lang/Class;Ljava/lang/ClassLoader;)Ljava/util/ServiceLoader;");
+	/** pre filter: one of these must occur in the raw class file */
+	private static final List<byte[]> MARKERS = List.of(SERVICE_LOADER.getBytes(StandardCharsets.ISO_8859_1),
+		"javax/xml/".getBytes(StandardCharsets.ISO_8859_1));
+	private static final ConstantPoolPatcher.Rule SERVICE_LOADER_RULE = new ConstantPoolPatcher.Rule(SERVICE_LOADER,
+		ServiceLoaders.class.getName().replace('.', '/'),
+		Set.of("load(Ljava/lang/Class;)Ljava/util/ServiceLoader;",
+			"load(Ljava/lang/Class;Ljava/lang/ClassLoader;)Ljava/util/ServiceLoader;"));
 	private static final String CALL_SITE_WEAVER = ServiceLoaders.class.getPackageName() + ".CallSiteWeaver";
 
 	/** how the calls are redirected, see the class comment */
@@ -78,15 +90,22 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 
 	private final Tracing trace;
 	private final Technique technique;
-	private final ClassWeaver weaver;
+	/** the call site technique, {@code null} with cpool */
+	private final ClassWeaver callSites;
+	/** the constant pool redirects: the JDK factories, plus ServiceLoader.load with cpool */
+	private final List<ConstantPoolPatcher.Rule> rules;
 	private final AtomicInteger wovenClasses = new AtomicInteger();
 	private final AtomicInteger wovenCallSites = new AtomicInteger();
 
 	ServiceLoaderWeavingHook(Tracing trace, Technique requested) {
 		this.trace = trace;
-		ClassWeaver callSite = requested == Technique.CALLSITE ? callSiteWeaver() : null;
-		this.technique = callSite != null ? Technique.CALLSITE : Technique.CPOOL;
-		this.weaver = callSite != null ? callSite : this::redirectInConstantPool;
+		this.callSites = requested == Technique.CALLSITE ? callSiteWeaver() : null;
+		this.technique = callSites != null ? Technique.CALLSITE : Technique.CPOOL;
+		List<ConstantPoolPatcher.Rule> all = new ArrayList<>(JdkFactories.RULES);
+		if (callSites == null) {
+			all.add(0, SERVICE_LOADER_RULE);
+		}
+		this.rules = List.copyOf(all);
 	}
 
 	/** the technique in use, {@link Technique#CPOOL} if {@code callsite} is not available */
@@ -107,11 +126,17 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 	@Override
 	public void weave(WovenClass wovenClass) {
 		byte[] bytes = wovenClass.getBytes();
-		if (indexOf(bytes, MARKER) < 0) {
+		if (!containsMarker(bytes)) {
 			return;
 		}
 		try {
-			byte[] woven = weaver.weave(wovenClass.getClassName(), bytes, wovenClass.getBundleWiring(), wovenCallSites);
+			String className = wovenClass.getClassName();
+			BundleWiring wiring = wovenClass.getBundleWiring();
+			byte[] woven = callSites == null ? null : callSites.weave(className, bytes, wiring, wovenCallSites);
+			byte[] redirected = redirectInConstantPool(className, woven != null ? woven : bytes, wiring, wovenCallSites);
+			if (redirected != null) {
+				woven = redirected;
+			}
 			if (woven != null) {
 				wovenClass.setBytes(woven);
 				List<String> imports = wovenClass.getDynamicImports();
@@ -126,17 +151,29 @@ final class ServiceLoaderWeavingHook implements WeavingHook {
 		}
 	}
 
-	/** the {@code cpool} technique, see {@link ConstantPoolPatcher} */
+	/**
+	 * The constant pool redirects, see {@link ConstantPoolPatcher}: the
+	 * {@code cpool} technique for {@code ServiceLoader.load} and, with either
+	 * technique, the JDK factory methods of {@link JdkFactories}.
+	 */
 	byte[] redirectInConstantPool(String className, byte[] bytes, BundleWiring wiring, AtomicInteger changes) {
-		ConstantPoolPatcher.Result result = ConstantPoolPatcher.redirect(bytes, SERVICE_LOADER, "load",
-			LOAD_DESCRIPTORS, SERVICE_LOADERS);
+		ConstantPoolPatcher.Result result = ConstantPoolPatcher.redirect(bytes, rules);
 		if (result == null) {
 			return null;
 		}
 		changes.addAndGet(result.redirected());
-		trace.trace("woven %s: %d ServiceLoader.load method reference(s) in the constant pool%s", className,
+		trace.trace("woven %s: %d method reference(s) redirected in the constant pool%s", className,
 			result.redirected(), wiring == null ? "" : " of bundle " + wiring.getBundle().getSymbolicName());
 		return result.bytes();
+	}
+
+	private static boolean containsMarker(byte[] bytes) {
+		for (byte[] marker : MARKERS) {
+			if (indexOf(bytes, marker) >= 0) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

@@ -27,6 +27,7 @@
 	org.example.spi.equinox;version='[1.0,1.1)'
 
 -runproperties: \
+	test.deployment=equinox-extension,\
 	spi.equinox.trace=true
 
 # Bundles without ServiceLoader metadata are invisible to the resolver, so every one is listed.
