@@ -233,34 +233,34 @@ The class space row is the reason this project exists: without the package wirin
 
 ## Performance
 
-Setup: `org.example.serviceloader.bench`, Java 25, one developer machine, 200 000 measured operations after 50 000 warm up operations, two providers of Greeter 1.0, a fresh `ServiceLoader` per operation (how application code uses it and where a mediator adds its cost). Best of two runs after a clean build. The plain column is the same loop on the flat surefire class path without OSGi. All values are **microseconds per operation**.
+Setup: `org.example.serviceloader.bench`, Java 25, one developer machine, 200 000 measured operations after 50 000 warm up operations, two providers of Greeter 1.0, a fresh `ServiceLoader` per operation (how application code uses it and where a mediator adds its cost). Best of two runs after a clean build, all columns in the same session (2026-09-22). The plain column is the same loop on the flat surefire class path without OSGi (no framework, hence the same value in both tables). The weaver is measured with both techniques: `callsite`, the default of the Java 25 weaver, and `cpool` (`spi.weaver.technique=cpool`, the only technique of the Java 21 variant). All values are **microseconds per operation**.
 
 **Felix 7.0.5**
 
-| Scenario | plain class path (µs/op) | Weaver (µs/op) | Launcher based mediator (µs/op) | SPI Fly, auto properties (µs/op) |
-|---|---|---|---|---|
-| `load(Class)` only, no iteration | 0.04 | 0.08 | 0.07 | 2.7 |
-| `load(Class)` + iterate 2 providers | 15.8 | 7.7 | 7.0 | 10.9 |
-| `load(Class)` + `stream()` types only | 12.0 | 4.5 | 12.0 | 15.3 |
-| `load(Class, bundleClassLoader)` + iterate | 21.0 | 7.3 | 5.6 | 76 |
+| Scenario | plain class path (µs/op) | Weaver `callsite` (µs/op) | Weaver `cpool` (µs/op) | Launcher based mediator (µs/op) | SPI Fly, auto properties (µs/op) |
+|---|---|---|---|---|---|
+| `load(Class)` only, no iteration | 0.09 | 0.18 | 1.18 | 0.08 | 6.0 |
+| `load(Class)` + iterate 2 providers | 25.6 | 13.2 | 14.3 | 16.4 | 17.7 |
+| `load(Class)` + `stream()` types only | 24.5 | 10.7 | 11.8 | 13.7 | 17.2 |
+| `load(Class, bundleClassLoader)` + iterate | 23.9 | 10.5 | 12.0 | 11.2 | 124 |
 
 **Equinox 3.23.0**
 
-| Scenario | plain class path (µs/op) | Weaver (µs/op) | Launcher based mediator (µs/op) | SPI Fly, auto properties (µs/op) |
-|---|---|---|---|---|
-| `load(Class)` only, no iteration | 0.04 | 0.09 | 0.05 | 5.6 |
-| `load(Class)` + iterate 2 providers | 15.8 | 5.4 | 21.2 | 8.6 |
-| `load(Class)` + `stream()` types only | 12.0 | 4.2 | 20.7 | 8.3 |
-| `load(Class, bundleClassLoader)` + iterate | 21.0 | 7.4 | 7.8 | 77 |
+| Scenario | plain class path (µs/op) | Weaver `callsite` (µs/op) | Weaver `cpool` (µs/op) | Launcher based mediator (µs/op) | SPI Fly, auto properties (µs/op) |
+|---|---|---|---|---|---|
+| `load(Class)` only, no iteration | 0.09 | 0.23 | 1.27 | 0.10 | 9.7 |
+| `load(Class)` + iterate 2 providers | 25.6 | 12.0 | 13.7 | 27.7 | 18.6 |
+| `load(Class)` + `stream()` types only | 24.5 | 10.0 | 11.2 | 28.2 | 18.7 |
+| `load(Class, bundleClassLoader)` + iterate | 23.9 | 10.3 | 11.3 | 8.7 | 149 |
 
 - **The JDK dominates.** Every `ServiceLoader` instance re-reads and parses the `META-INF/services` resources and calls `Class.forName` per provider; the mediators add microseconds, with two exceptions on the SPI Fly side.
-- **`load(Class)` alone is nearly free** for weaver and mediator, the JDK `ServiceLoader` is lazy. SPI Fly resolves providers eagerly at that point.
-- **Weaver and mediator are equal on Felix** within the noise; the `StackWalker` is worth about 1 µs and does not show above it.
-- **Equinox makes the mediator's TCCL path expensive**: the TCCL is the `ContextFinder`, which walks the stack itself, asks the bundle loader and then its parent, the mediator's TCCL loader with its own walk. The explicit class loader path through the `ClassLoaderHook` costs the same as on Felix. The weaver never touches the TCCL.
-- **`cpool` versus `callsite`:** the weaver columns above were measured with the call site technique. The constant pool technique finds the caller with a `StackWalker` (hidden frames included) instead of receiving it as a constant, about 1 µs per `load`: in a later session on a slower machine state (plain class path 25.9 instead of 15.8 µs) `load` only took 1.0 µs with `cpool` against 0.15 µs with `callsite` on Felix, `load` + iterate 14.5 against 13.0 µs; on Equinox 1.1 against 0.24 µs and 13.6 against 12.0 µs. `DROP_METHOD_INFO` (Java 22+, `CallerFinder`; the Java 21 variant looks it up by name) took the walk from 1.35 to 1.0 µs, a smaller initial batch (`estimateDepth`) did not measurably help. The ranking is unchanged: the weaver stays ahead of the TCCL path on Equinox (13.6 against 28.3 µs) and of SPI Fly everywhere.
-- **SPI Fly `load(Class, ClassLoader)`** creates a `WrapperCL` per call with a double lookup, hence 76 µs.
+- **`load(Class)` alone is nearly free** for the weaver with `callsite` and for the mediator, the JDK `ServiceLoader` is lazy. SPI Fly resolves providers eagerly at that point.
+- **`callsite` versus `cpool`:** `cpool` finds the caller with a `StackWalker` (hidden frames included, so that method references work) instead of receiving it as a constant, about 1 µs per `load` and 1 to 1.5 µs per scenario. `DROP_METHOD_INFO` (Java 22+, `CallerFinder`; the Java 21 variant looks it up by name) took that walk from 1.35 to about 1.0 to 1.2 µs, a smaller initial batch (`estimateDepth`) did not measurably help.
+- **The weaver is fastest or tied** in every scenario with iteration, on both frameworks, with either technique. On Felix the mediator's TCCL path is 1 to 3 µs behind (its own `StackWalker`, about 1 µs).
+- **Equinox makes the mediator's TCCL path expensive**: the TCCL is the `ContextFinder`, which walks the stack itself, asks the bundle loader and then its parent, the mediator's TCCL loader with its own walk. The explicit class loader path through the `ClassLoaderHook` costs the same as on Felix; it is the one cell where the mediator is ahead, by less than the noise. The weaver never touches the TCCL.
+- **SPI Fly `load(Class, ClassLoader)`** creates a `WrapperCL` per call with a double lookup, hence 124 and 149 µs.
 - **The flat class path is slow** because the application class loader scans every jar on the surefire class path per operation; in OSGi the registry hands over exactly the two provider entries.
-- **Noise:** 10 to 50 percent per cell between runs; differences below about 3 µs between two OSGi cells are not a ranking. Stable across all runs: the weaver is fastest or tied in every OSGi scenario, SPI Fly's eager `load` and `WrapperCL` path are an order of magnitude apart, the mediator's TCCL path on Equinox is the slowest mediated path.
+- **Noise and machine state:** 10 to 50 percent per cell between runs; differences below about 3 µs between two OSGi cells are not a ranking. The absolute level depends on the machine state: an earlier session measured the plain class path at 15.8 instead of 25.6 µs and the mediated paths lower in proportion, with the same ranking. Stable across all runs: the weaver is fastest or tied in every OSGi scenario, SPI Fly's eager `load` and `WrapperCL` path are an order of magnitude apart, the mediator's TCCL path on Equinox is the slowest mediated path.
 
 ## Maven notes
 
