@@ -157,6 +157,26 @@
         <artifactId>org.example.serviceloader.consumer.rb</artifactId>
         <version>${revision}</version>
       </dependency>
+      <dependency>
+        <groupId>org.example.spi</groupId>
+        <artifactId>org.example.serviceloader.clash.provider</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.example.spi</groupId>
+        <artifactId>org.example.serviceloader.clash.provider.v2</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.example.spi</groupId>
+        <artifactId>org.example.serviceloader.clash.caller</artifactId>
+        <version>${revision}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.example.spi</groupId>
+        <artifactId>org.example.serviceloader.clash.caller.v2</artifactId>
+        <version>${revision}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 

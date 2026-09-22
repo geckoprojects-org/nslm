@@ -28,7 +28,8 @@ import org.osgi.framework.wiring.BundleWiring;
 /**
  * Creates and caches the {@link SpiClassLoader} per consumer bundle that the
  * woven call sites hand to {@code java.util.ServiceLoader}. One loader per
- * bundle wiring; a bundle that is refreshed or uninstalled loses its entry.
+ * bundle wiring; all loaders are dropped when any bundle is unresolved,
+ * updated or uninstalled, see {@link #bundleChanged(BundleEvent)}.
  */
 final class SpiLoaders implements SynchronousBundleListener {
 
@@ -101,7 +102,13 @@ final class SpiLoaders implements SynchronousBundleListener {
 	@Override
 	public void bundleChanged(BundleEvent event) {
 		switch (event.getType()) {
-			case BundleEvent.UNRESOLVED, BundleEvent.UNINSTALLED, BundleEvent.UPDATED -> byBundle.remove(event.getBundle().getBundleId());
+			// A consumer's loader is the initiating loader of every provider class it handed to
+			// ServiceLoader, and the JVM answers later Class.forName calls for these names from its
+			// own cache without asking the loader again. A provider bundle that goes away or changes
+			// leaves the consumer's wiring as it is, so the consumer's loader must be replaced, or it
+			// keeps handing out (and pins) the classes of the old provider. Bundle changes are rare:
+			// drop all loaders instead of tracking which consumer used which provider.
+			case BundleEvent.UNRESOLVED, BundleEvent.UNINSTALLED, BundleEvent.UPDATED -> byBundle.clear();
 			default -> {
 			}
 		}

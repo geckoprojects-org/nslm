@@ -246,6 +246,29 @@
       <scope>runtime</scope>
     </dependency>
 
+    <!-- provider class name clash: not in any -runbundles, embedded under clash/ and installed by
+         ProviderClassNameClashTest (the extra providers would change the counts of the Greeter tests) -->
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.clash.provider</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.clash.provider.v2</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.clash.caller</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.clash.caller.v2</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
     <!-- JAXB scenario: jakarta.xml.bind-api + GlassFish runtime as they come from Maven Central -->
     <dependency>
       <groupId>org.glassfish.jaxb</groupId>
@@ -402,6 +425,25 @@
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>clash-bundles</id>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <includeArtifactIds>org.example.serviceloader.clash.provider,org.example.serviceloader.clash.provider.v2,org.example.serviceloader.clash.caller,org.example.serviceloader.clash.caller.v2</includeArtifactIds>
+              <outputDirectory>${project.build.directory}/clash</outputDirectory>
+              <stripVersion>true</stripVersion>
+              <overWriteSnapshots>true</overWriteSnapshots>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>biz.aQute.bnd</groupId>
         <artifactId>bnd-maven-plugin</artifactId>

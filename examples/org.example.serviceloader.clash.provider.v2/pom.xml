@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.example.spi</groupId>
+    <artifactId>examples</artifactId>
+    <version>${revision}</version>
+  </parent>
+  <artifactId>org.example.serviceloader.clash.provider.v2</artifactId>
+  <name>Clash provider for Greeter 2.0</name>
+  <description>Provider class org.example.serviceloader.clash.ClashGreeter for Greeter 2.0, the same name as in the 1.0 clash provider; installed by the provider class name clash test.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.example.spi</groupId>
+      <artifactId>org.example.serviceloader.api.v2</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+</project>

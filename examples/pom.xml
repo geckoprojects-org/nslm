@@ -22,6 +22,10 @@
     <module>org.example.serviceloader.consumer</module>
     <module>org.example.serviceloader.consumer.v2</module>
     <module>org.example.serviceloader.consumer.rb</module>
+    <module>org.example.serviceloader.clash.provider</module>
+    <module>org.example.serviceloader.clash.provider.v2</module>
+    <module>org.example.serviceloader.clash.caller</module>
+    <module>org.example.serviceloader.clash.caller.v2</module>
   </modules>
 
   <build>
